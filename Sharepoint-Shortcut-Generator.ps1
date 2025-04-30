@@ -24,16 +24,47 @@
 #> 
 
 [CmdletBinding(SupportsShouldProcess=$true)]
-Param()
+Param(
+    [Parameter(Mandatory=$true,
+    HelpMessage = "Enter your Microsoft Tennant ID.")]
+    [string]$tenantId,
+    [Parameter(Mandatory=$true,
+    HelpMessage = "Enter your Microsoft Client ID.")]
+    [string]$clientId
+)
 
-if (!([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) { Start-Process powershell.exe "-ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs; exit }
+function Restart-AsAdmin  {
+    if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
+        $argList = @(
+            "-ExecutionPolicy", "Bypass",
+            "-File", "`"$PSCommandPath`"",
+            "-tenantId", "`"$tenantId`"",
+            "-clientId", "`"$clientId`""
+        )
+        Start-Process powershell.exe -ArgumentList $argList -Verb RunAs
+        exit
+    }
+}
+
+function Restart-Yourself  {
+    $argList = @(
+        "-ExecutionPolicy", "Bypass",
+        "-File", "`"$PSCommandPath`"",
+        "-tenantId", "`"$tenantId`"",
+        "-clientId", "`"$clientId`""
+    )
+    Start-Process powershell.exe -ArgumentList $argList
+    exit
+}
+
+Restart-AsAdmin
 
 $MyProgs = Get-ItemProperty 'HKLM:SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*'; $MyProgs += Get-ItemProperty 'HKLM:SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*'
 $InstalledProgs = $MyProgs.DisplayName | Sort-Object -Unique
 
 $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
 
-function Is-WebView2RuntimeNeeded {
+function Get-WebView2Installation {
     [CmdletBinding()]
     param ()
 
@@ -136,12 +167,12 @@ if ($InstalledProgs -like "*PowerShell*7*") {
     Remove-Item -Path $workpath -Recurse -Force
     Write-Host "Sleeping for 15 seconds..."
     Start-Sleep -Seconds 15
-    Start-Process powershell.exe "-ExecutionPolicy Bypass -File `"$PSCommandPath`""
+    Restart-Yourself
     exit 0
 }
 
 # Check if WebView2 is needed
-$webview2Needed = Is-WebView2RuntimeNeeded
+$webview2Needed = Get-WebView2Installation
 if ($webview2Needed) {
     $url = "https://go.microsoft.com/fwlink/p/?LinkId=2124703"
     $folderName = Get-Date -Format "yyyy-MM-dd_HH-mm-ss"
@@ -191,10 +222,42 @@ if ($webview2Needed) {
     Remove-Item -Path $workpath -Recurse -Force
     Write-Host "Sleeping for 15 seconds..."
     Start-Sleep -Seconds 15
-    Start-Process powershell.exe "-ExecutionPolicy Bypass -File `"$PSCommandPath`""
+    Restart-Yourself
     exit 0
 } else {
     Write-Host "WebView2 Runtime is already installed."
-    pause
-    exit 0
 }
+
+$workpath = $PSScriptRoot
+
+Set-Location -Path $workpath
+
+$curlpath = "$workpath\curl\curl.exe"
+
+Invoke-Expression -Command "$workpath\Import-Assemblies.ps1"
+Import-Module -Name "$workpath\PSAuthClient\PSAuthClient.psd1" -Force
+
+Clear-WebView2Cache -Confirm:$false
+
+$authorization_endpoint = "https://login.microsoftonline.com/$tenantId/oauth2/v2.0/authorize"
+$token_endpoint = "https://login.microsoftonline.com/$tenantId/oauth2/v2.0/token"
+
+$splat = @{
+    client_id = "$clientId"
+    scope = "files.readwrite.all  user.read allsites.fullcontrol myfiles.read myfiles.write user.readwrite.all"
+    redirect_uri = "https://login.microsoftonline.com/common/oauth2/nativeclient"
+    customParameters = @{}
+}
+
+try {
+    $code = Invoke-OAuth2AuthorizationEndpoint -uri $authorization_endpoint @splat -usePkce:$false
+    $token = Invoke-OAuth2TokenEndpoint -uri $token_endpoint @code
+} catch {
+    Write-Host "Error: $($_.Exception.Message)"
+    pause
+    exit 1
+}
+
+Write-Host "Access Token: $($token.access_token)"
+
+pause
