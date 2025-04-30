@@ -33,7 +33,31 @@ Param(
     [string]$clientId
 )
 
-if (!([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) { Start-Process powershell.exe "-ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs; exit }
+function Restart-AsAdmin  {
+    if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
+        $argList = @(
+            "-ExecutionPolicy", "Bypass",
+            "-File", "`"$PSCommandPath`"",
+            "-tenantId", "`"$tenantId`"",
+            "-clientId", "`"$clientId`""
+        )
+        Start-Process powershell.exe -ArgumentList $argList -Verb RunAs
+        exit
+    }
+}
+
+function Restart-Yourself  {
+    $argList = @(
+        "-ExecutionPolicy", "Bypass",
+        "-File", "`"$PSCommandPath`"",
+        "-tenantId", "`"$tenantId`"",
+        "-clientId", "`"$clientId`""
+    )
+    Start-Process powershell.exe -ArgumentList $argList
+    exit
+}
+
+Restart-AsAdmin
 
 $MyProgs = Get-ItemProperty 'HKLM:SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*'; $MyProgs += Get-ItemProperty 'HKLM:SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*'
 $InstalledProgs = $MyProgs.DisplayName | Sort-Object -Unique
@@ -143,7 +167,7 @@ if ($InstalledProgs -like "*PowerShell*7*") {
     Remove-Item -Path $workpath -Recurse -Force
     Write-Host "Sleeping for 15 seconds..."
     Start-Sleep -Seconds 15
-    Start-Process powershell.exe "-ExecutionPolicy Bypass -File `"$PSCommandPath`""
+    Restart-Yourself
     exit 0
 }
 
@@ -198,7 +222,7 @@ if ($webview2Needed) {
     Remove-Item -Path $workpath -Recurse -Force
     Write-Host "Sleeping for 15 seconds..."
     Start-Sleep -Seconds 15
-    Start-Process powershell.exe "-ExecutionPolicy Bypass -File `"$PSCommandPath`""
+    Restart-Yourself
     exit 0
 } else {
     Write-Host "WebView2 Runtime is already installed."
