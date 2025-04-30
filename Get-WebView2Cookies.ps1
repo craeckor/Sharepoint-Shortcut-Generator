@@ -47,10 +47,21 @@ $label.Text = "Selecting YES at STAY SIGNED IN is required to save the cookies i
 $label.AutoSize = $true
 $label.ForeColor = [System.Drawing.Color]::Red
 
+# Set Arial font for label and button
+$arialFont = New-Object System.Drawing.Font("Arial", 10, [System.Drawing.FontStyle]::Regular)
+$label.Font = $arialFont
+
 # Add a OK button at the bottom middle to close the form and continue
 $okButton = New-Object System.Windows.Forms.Button
 $okButton.Text = "OK"
+$okButton.Font = New-Object System.Drawing.Font("Arial", 10, [System.Drawing.FontStyle]::Bold)
 $okButton.AutoSize = $true
+$okButton.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
+$okButton.BackColor = [System.Drawing.Color]::FromArgb(0, 120, 215) # Windows blue
+$okButton.ForeColor = [System.Drawing.Color]::White
+$okButton.Padding = '10,5,10,5'
+$okButton.FlatAppearance.BorderSize = 0
+$okButton.Cursor = [System.Windows.Forms.Cursors]::Hand
 $okButton.Add_Click({
     $infoform.DialogResult = [System.Windows.Forms.DialogResult]::OK
     $infoform.Close()
