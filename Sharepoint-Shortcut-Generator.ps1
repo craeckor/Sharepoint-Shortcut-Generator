@@ -241,10 +241,11 @@ Clear-WebView2Cache -Confirm:$false
 
 $authorization_endpoint = "https://login.microsoftonline.com/$tenantId/oauth2/v2.0/authorize"
 $token_endpoint = "https://login.microsoftonline.com/$tenantId/oauth2/v2.0/token"
+$graphEndpoint = "https://graph.microsoft.com/v1.0"
 
 $splat = @{
     client_id = "$clientId"
-    scope = "files.readwrite.all  user.read allsites.fullcontrol myfiles.read myfiles.write user.readwrite.all"
+    scope = "files.readwrite.all user.read.all allsites.fullcontrol allsites.manage myfiles.read myfiles.write user.readwrite.all"
     redirect_uri = "https://login.microsoftonline.com/common/oauth2/nativeclient"
     customParameters = @{}
 }
@@ -258,6 +259,15 @@ try {
     exit 1
 }
 
-Write-Host "Access Token: $($token.access_token)"
+$accessToken = "$($token.access_token)"
+
+# Get all users in the tenant
+$allUsers = Invoke-Expression -Command "$curlpath --connect-timeout 45 --retry 5 --retry-max-time 120 --retry-connrefused -S -s -X GET -H `"Authorization: Bearer $accessToken`" -H `"Content-Type: application/json`" -H `"Accept: application/json`" `"$graphEndpoint/users`""
+
+# Parse the JSON response
+$allUsersObj = $allUsers | ConvertFrom-Json
+
+# Generate and display the table
+$allUsersObj.value | Select-Object DisplayName, mail, id | Format-Table -AutoSize
 
 pause
