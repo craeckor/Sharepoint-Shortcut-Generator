@@ -41,6 +41,12 @@ function Restart-AsAdmin  {
             "-tenantId", "`"$tenantId`"",
             "-clientId", "`"$clientId`""
         )
+        
+        # Pass the Verbose parameter if it was provided
+        if ($PSCmdlet.MyInvocation.BoundParameters["Verbose"]) {
+            $argList += "-Verbose"
+        }
+        
         Start-Process powershell.exe -ArgumentList $argList -Verb RunAs
         exit
     }
@@ -53,6 +59,12 @@ function Restart-Yourself  {
         "-tenantId", "`"$tenantId`"",
         "-clientId", "`"$clientId`""
     )
+    
+    # Pass the Verbose parameter if it was provided
+    if ($PSCmdlet.MyInvocation.BoundParameters["Verbose"]) {
+        $argList += "-Verbose"
+    }
+    
     Start-Process powershell.exe -ArgumentList $argList
     exit
 }
@@ -285,7 +297,7 @@ try {
 
 $accessToken = "$($token.access_token)"
 
-Write-Host "$($token.access_token)"
+Write-Verbose "Access-Token (Bearer-Token): $($token.access_token)"
 
 # Get all users in the tenant
 $allUsers = Get-GraphRequest -Uri "$graphEndpoint/users" -AccessToken "$accessToken"
@@ -294,7 +306,8 @@ $allUsers = Get-GraphRequest -Uri "$graphEndpoint/users" -AccessToken "$accessTo
 $allUsersObj = $allUsers | ConvertFrom-Json
 
 # Generate and display the table
-$allUsersObj.value | Select-Object DisplayName, mail, id | Format-Table -AutoSize
+$usersAllTable = ($allUsersObj.value | Select-Object DisplayName, mail, id | Format-Table -AutoSize | Out-String).Trim()
+Write-Verbose "All users in tenant:`n$usersAllTable"
 
 # Only call ONCE and assign result
 $selectedUsers = Show-UserSelectionForm -userList $allUsersObj.value
@@ -307,15 +320,20 @@ if (-not $selectedUsers -or $selectedUsers.Count -eq 0) {
 
 $users.list = $selectedUsers
 
-
-$($users)
-$($users.list)
-$($users.list.Count)
-$($users.list | Format-Table -AutoSize)
+# Fix for Write-Verbose formatting issues
+Write-Verbose "Users object: $($users | ConvertTo-Json -Depth 2 -Compress)"
+Write-Verbose "Selected users count: $($users.list.Count)"
+# Format as string first, then output with Write-Verbose
+$usersTable = ($users.list | Format-Table -AutoSize | Out-String).Trim()
+Write-Verbose "Selected users:`n$usersTable"
 
 $allSites = Get-GraphRequest -Uri "$graphEndpoint/sites?search=*" -AccessToken "$accessToken"
 
 $allSitesObj = $allSites | ConvertFrom-Json
+
+$sitesAllTable = ($allSitesObj.value | Select-Object DisplayName, WebUrl, id | Format-Table -AutoSize | Out-String).Trim()
+Write-Verbose "All users in tenant:`n$sitesAllTable"
+
 $selectedSites = Show-SiteSelectionForm -SiteList $allSitesObj.value
 
 if (-not $selectedSites -or $selectedSites.Count -eq 0) {
@@ -326,6 +344,7 @@ if (-not $selectedSites -or $selectedSites.Count -eq 0) {
 
 $sites.list = $selectedSites
 
-Write-Host "Selected Sites:"
-$sites.list | Format-Table -Property DisplayName, WebUrl, id -AutoSize
+# Format as string first, then output with Write-Verbose
+$sitesTable = ($sites.list | Format-Table -Property DisplayName, WebUrl, id -AutoSize | Out-String).Trim()
+Write-Verbose "Selected sites:`n$sitesTable"
 pause

@@ -723,7 +723,7 @@ function Show-SiteSelectionForm {
             $rowIdx = $dataGridView.Rows.Add($row)
             
             # Apply styling for root sites if needed
-            if ($site.root -ne $null) {
+            if ($null -ne $site.root) {
                 $dataGridView.Rows[$rowIdx].DefaultCellStyle.Font = New-Object System.Drawing.Font("Arial", 9, [System.Drawing.FontStyle]::Bold)
                 $dataGridView.Rows[$rowIdx].DefaultCellStyle.BackColor = [System.Drawing.Color]::FromArgb(240, 247, 255)
             }
