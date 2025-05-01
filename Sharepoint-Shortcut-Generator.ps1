@@ -233,15 +233,39 @@ $workpath = $PSScriptRoot
 Set-Location -Path $workpath
 
 $curlpath = "$workpath\curl\curl.exe"
+$users = @{}
+$sites = @{}
 
 Invoke-Expression -Command "$workpath\Import-Assemblies.ps1"
 Import-Module -Name "$workpath\PSAuthClient\PSAuthClient.psd1" -Force
+Import-Module -Name "$workpath\Forms-Function.ps1" -Force
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName System.Drawing
 
 Clear-WebView2Cache -Confirm:$false
 
 $authorization_endpoint = "https://login.microsoftonline.com/$tenantId/oauth2/v2.0/authorize"
 $token_endpoint = "https://login.microsoftonline.com/$tenantId/oauth2/v2.0/token"
 $graphEndpoint = "https://graph.microsoft.com/v1.0"
+
+function Get-GraphRequest {
+    param (
+        [Parameter(Mandatory=$true)]
+        [string]$Uri,
+        [Parameter(Mandatory=$true)]
+        [string]$AccessToken
+    )
+    try {
+        $response = Invoke-Expression -Command "$curlpath --connect-timeout 45 --retry 5 --retry-max-time 120 --retry-connrefused -S -s -X GET -H `"Authorization: Bearer $AccessToken`" -H `"Content-Type: application/json`" -H `"Accept: application/json`" `"$Uri`""
+    }
+    catch {
+        if ($LASTEXITCODE -ne 0) {
+            return $($_.Exception.Message)
+        }
+        return $($_.Exception.Message)
+    }
+    return $response
+}
 
 $splat = @{
     client_id = "$clientId"
@@ -261,8 +285,10 @@ try {
 
 $accessToken = "$($token.access_token)"
 
+Write-Host "$($token.access_token)"
+
 # Get all users in the tenant
-$allUsers = Invoke-Expression -Command "$curlpath --connect-timeout 45 --retry 5 --retry-max-time 120 --retry-connrefused -S -s -X GET -H `"Authorization: Bearer $accessToken`" -H `"Content-Type: application/json`" -H `"Accept: application/json`" `"$graphEndpoint/users`""
+$allUsers = Get-GraphRequest -Uri "$graphEndpoint/users" -AccessToken "$accessToken"
 
 # Parse the JSON response
 $allUsersObj = $allUsers | ConvertFrom-Json
@@ -270,4 +296,36 @@ $allUsersObj = $allUsers | ConvertFrom-Json
 # Generate and display the table
 $allUsersObj.value | Select-Object DisplayName, mail, id | Format-Table -AutoSize
 
+# Only call ONCE and assign result
+$selectedUsers = Show-UserSelectionForm -userList $allUsersObj.value
+
+if (-not $selectedUsers -or $selectedUsers.Count -eq 0) {
+    Write-Host "No users selected. Exiting..."
+    pause
+    exit
+}
+
+$users.list = $selectedUsers
+
+
+$($users)
+$($users.list)
+$($users.list.Count)
+$($users.list | Format-Table -AutoSize)
+
+$allSites = Get-GraphRequest -Uri "$graphEndpoint/sites?search=*" -AccessToken "$accessToken"
+
+$allSitesObj = $allSites | ConvertFrom-Json
+$selectedSites = Show-SiteSelectionForm -SiteList $allSitesObj.value
+
+if (-not $selectedSites -or $selectedSites.Count -eq 0) {
+    Write-Host "No sites selected. Exiting..."
+    pause
+    exit
+}
+
+$sites.list = $selectedSites
+
+Write-Host "Selected Sites:"
+$sites.list | Format-Table -Property DisplayName, WebUrl, id -AutoSize
 pause
