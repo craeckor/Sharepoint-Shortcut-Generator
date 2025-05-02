@@ -10,14 +10,13 @@ switch -Wildcard ( $env:PROCESSOR_ARCHITECTURE ) {
 # copy runtime
 Join-Path $PSScriptRoot "Microsoft.Web.WebView2.*\runtimes\$runtime\*.dll" -Resolve | ForEach-Object {
     try {
-        Copy-Item -Path $_ -Destination (Join-Path $PSScriptRoot "Microsoft.Web.WebView2.*\$framework\" -Resolve) -Force
+        Copy-Item -Path $_ -Destination (Join-Path $PSScriptRoot "Microsoft.Web.WebView2.*\$framework\" -Resolve) -Force -ErrorAction SilentlyContinue
     } catch {
-        Write-Host "Error: $($_.Exception.Message)"
+        Write-Verbose "File is already present, skipping copy: $_"
     }
-    write-debug $_
 }
 # import assemblies
 Join-Path $PSScriptRoot "Microsoft.Web.WebView2.*\$framework\Microsoft.Web.WebView2.*.dll" -Resolve | ForEach-Object {
     Import-Module $_ -ErrorAction Stop
-    write-debug "imported assembly $_"
+    Write-Verbose "imported assembly $_"
 }

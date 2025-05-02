@@ -347,4 +347,9 @@ $sites.list = $selectedSites
 # Format as string first, then output with Write-Verbose
 $sitesTable = ($sites.list | Format-Table -Property DisplayName, WebUrl, id -AutoSize | Out-String).Trim()
 Write-Verbose "Selected sites:`n$sitesTable"
+
+$admincookie = pwsh -ExecutionPolicy Bypass -File "$workpath\Get-WebView2Cookies.ps1"
+
+Write-Verbose "Admin cookie: $($admincookie)"
+
 pause
