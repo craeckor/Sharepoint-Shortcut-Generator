@@ -18,7 +18,7 @@
     .\oauth.ps1 -tenantId 'your-tenant-id' -clientId 'your-client-id'
 
     .NOTES
-    Required Scope-Permissions: files.readwrite.all  user.read allsites.fullcontrol myfiles.read myfiles.write user.readwrite.all
+    Required Scope-Permissions: files.readwrite.all user.read.all allsites.fullcontrol allsites.manage myfiles.read myfiles.write user.readwrite.all
     All Scope-Permissions require Admin Consent for the Tenant.
     WebView2 is required for the OAuth2 authentication process.
 #> 
