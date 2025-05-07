@@ -247,6 +247,10 @@ Set-Location -Path $workpath
 $curlpath = "$workpath\curl\curl.exe"
 $users = @{}
 $sites = @{}
+$requests = @{}
+$requests.succeeded = @{}
+$requests.failed = @{}
+$requests.counter = 0
 
 Invoke-Expression -Command "$workpath\Import-Assemblies.ps1"
 Import-Module -Name "$workpath\PSAuthClient\PSAuthClient.psd1" -Force
@@ -268,15 +272,74 @@ function Get-GraphRequest {
         [string]$AccessToken
     )
     try {
-        $response = Invoke-Expression -Command "$curlpath --connect-timeout 45 --retry 5 --retry-max-time 120 --retry-connrefused -S -s -X GET -H `"Authorization: Bearer $AccessToken`" -H `"Content-Type: application/json`" -H `"Accept: application/json`" `"$Uri`""
+        # Increment request counter before making the request
+        $script:requests.counter++
+        $currentRequestId = $script:requests.counter
+        
+        Write-Verbose "Making request #$currentRequestId to: $Uri"
+        $rawResponse = Invoke-Expression -Command "$curlpath --connect-timeout 45 --retry 5 --retry-max-time 120 --retry-connrefused -o - -S -s -w '%{http_code}' -X GET -H `"Authorization: Bearer $AccessToken`" -H `"Content-Type: application/json`" -H `"Accept: application/json`" `"$Uri`""
+        
+        if ($LASTEXITCODE -ne 0) {
+            # Store failed request information
+            $script:requests.failed[$currentRequestId] = @{
+                Uri = $Uri
+                Timestamp = Get-Date
+                Error = "Curl command failed with exit code $LASTEXITCODE"
+                HttpCode = $null
+                Response = $null
+            }
+            throw "Curl command failed with exit code $LASTEXITCODE"
+        }
+        
+        # Extract the HTTP status code (last 3 characters)
+        $httpCode = $rawResponse.Substring($rawResponse.Length - 3)
+        
+        # Extract the actual response body (everything except the last 3 characters)
+        $responseBody = $rawResponse.Substring(0, $rawResponse.Length - 3)
+        
+        # Check if HTTP status code indicates an error
+        if (-not ($httpCode -match "^(2\d\d)$")) {
+            # Store failed request information
+            $script:requests.failed[$currentRequestId] = @{
+                Uri = $Uri
+                Timestamp = Get-Date
+                Error = "HTTP request failed with status code: $httpCode"
+                HttpCode = $httpCode
+                Response = $responseBody
+            }
+            
+            Write-Verbose "HTTP request #$currentRequestId failed with status code: $httpCode"
+            Write-Verbose "Response body: $responseBody"
+            throw "HTTP request failed with status code: $httpCode"
+        }
+        
+        # Store successful request information
+        $script:requests.succeeded[$currentRequestId] = @{
+            Uri = $Uri
+            Timestamp = Get-Date
+            HttpCode = $httpCode
+            Response = $responseBody
+        }
+        
+        Write-Verbose "Request #$currentRequestId completed successfully with status code: $httpCode"
+        
+        # Return just the response body
+        return $responseBody
     }
     catch {
-        if ($LASTEXITCODE -ne 0) {
-            return $($_.Exception.Message)
+        Write-Error "Error in GraphAPI request: $($_.Exception.Message)"
+        if (-not $script:requests.failed.ContainsKey($currentRequestId)) {
+            # Store any other error not caught above
+            $script:requests.failed[$currentRequestId] = @{
+                Uri = $Uri
+                Timestamp = Get-Date
+                Error = $_.Exception.Message
+                HttpCode = $null
+                Response = $null
+            }
         }
         return $($_.Exception.Message)
     }
-    return $response
 }
 
 $splat = @{
@@ -348,8 +411,187 @@ $sites.list = $selectedSites
 $sitesTable = ($sites.list | Format-Table -Property DisplayName, WebUrl, id -AutoSize | Out-String).Trim()
 Write-Verbose "Selected sites:`n$sitesTable"
 
-$admincookie = pwsh -ExecutionPolicy Bypass -File "$workpath\Get-WebView2Cookies.ps1"
+foreach ($site in $sites.list) {
+    $site | Add-Member -NotePropertyName "DriveId" -NotePropertyValue $null -Force
 
-Write-Verbose "Admin cookie: $($admincookie)"
+    $drive = Get-GraphRequest -Uri "$graphEndpoint/sites/$($site.id)/drives" -AccessToken "$accessToken"
+
+    $driveObj = $drive | ConvertFrom-Json
+
+    $site.DriveId = $driveObj.value | Where-Object {$_.name -eq "Documents"} | Select-Object -ExpandProperty id
+}
+
+# Format as string first, then output with Write-Verbose
+$sitesTable = ($sites.list | Format-Table -Property DisplayName, DriveId, WebUrl, id -AutoSize | Out-String).Trim()
+Write-Verbose "Selected sites:`n$sitesTable"
+
+foreach ($site in $sites.list) {
+    $site | Add-Member -NotePropertyName "Permissions" -NotePropertyValue @{} -Force
+
+    Write-Verbose "Getting permissions for site: $($site.displayName)"
+    
+    # Get User Information List
+    $permissionslist = Get-GraphRequest -Uri "$(([uri]::new("$graphEndpoint/sites/$($site.id)/lists?filter=displayName eq 'User Information List'")).AbsoluteUri)" -AccessToken "$accessToken"
+    $permissionslistObj = $permissionslist | ConvertFrom-Json
+    $permissionslistId = $permissionslistObj.value | Where-Object {$_.displayName -eq "User Information List"} | Select-Object -ExpandProperty id
+    
+    if (-not $permissionslistId) {
+        Write-Warning "No 'User Information List' found for site: $($site.displayName)"
+        continue
+    }
+    
+    # Get list items with all fields
+    $permissions = Get-GraphRequest -Uri "$graphEndpoint/sites/$($site.id)/lists/$permissionslistId/items?expand=fields" -AccessToken "$accessToken"
+    $permissionsObj = $permissions | ConvertFrom-Json
+    
+    # Extract only the fields property from each item
+    $fieldsOnly = $permissionsObj.value | Select-Object -ExpandProperty fields
+    
+    # Store in the site object
+    $site.Permissions = $fieldsOnly
+    
+    # Display first 5 items with their key properties
+    Write-Verbose "Fields for first 5 users in site '$($site.displayName)':"
+    $fieldsTable = ($fieldsOnly | Select-Object | 
+        Select-Object EMail, Title, Name, FirstName, LastName, ContentType, Created, Modified -First 5 |
+        Format-Table -AutoSize | Out-String).Trim()
+    Write-Verbose $fieldsTable
+    
+    # Show total count
+    Write-Verbose "Total users in permissions list: $($fieldsOnly.Count)"
+}
+
+foreach ($user in $users.list) {
+    $user | Add-Member -NotePropertyName "sites" -NotePropertyValue @{} -Force
+    $userEmail = $user.mail
+    Write-Verbose "Looking for sites with access for user: $($user.displayName) ($userEmail)"
+
+    foreach ($site in $sites.list) {
+        # Find matching user in the site permissions by email
+        $matchingPermission = $site.Permissions | Where-Object { $_.EMail -eq $userEmail }
+        
+        if ($matchingPermission) {
+            # Add site to user's sites collection - simpler structure with just the essentials
+            $user.sites[$site.id] = @{
+                siteId = $site.id
+                siteName = $site.displayName
+                driveId = $site.DriveId
+            }
+            
+            Write-Verbose "  Added site: $($site.displayName) to user $($user.displayName)'s access list"
+        } else {
+            Write-Verbose "  User $($user.displayName) does not have access to site: $($site.displayName)"
+        }
+    }
+    
+    # Show summary of sites for this user
+    $siteCount = $user.sites.Count
+    if ($siteCount -gt 0) {
+        Write-Verbose "User $($user.displayName) has access to $siteCount sites"
+    } else {
+        Write-Warning "User $($user.displayName) does not have access to any of the selected sites"
+    }
+}
+
+# Get DriveList with proper structure for the folders form
+$driveList = @()
+foreach ($site in $sites.list) {
+    if ($site.DriveId) {
+        $driveList += [PSCustomObject]@{
+            id = $site.DriveId
+            name = "Documents"
+            siteDisplayName = $site.DisplayName
+            siteId = $site.id 
+            webUrl = $site.WebUrl
+        }
+    }
+}
+
+# Show the folder selection form
+$selectedFolders = Show-FolderSelectionForm -DriveList $driveList -AccessToken $accessToken
+
+# Display selected folders
+if (-not $selectedFolders -or $selectedFolders.Count -eq 0) {
+    Write-Host "No folders selected. Exiting..." -ForegroundColor Yellow
+    pause
+    exit
+}
+
+# Print selected folders
+Write-Host "Selected Folders:" -ForegroundColor Cyan
+$foldersTable = $selectedFolders | Format-Table -Property DriveName, SiteDisplayName, FolderName, WebUrl -AutoSize | Out-String
+Write-Host $foldersTable
+
+# Associate selected folders with users
+foreach ($user in $users.list) {
+    $user | Add-Member -NotePropertyName "folders" -NotePropertyValue @() -Force
+    
+    # For each site the user has access to
+    foreach ($siteId in $user.sites.Keys) {
+        # Get the driveId for this site from the user's sites collection
+        $siteDriveId = $user.sites[$siteId].driveId
+        
+        # Get relevant folders for this site by matching the driveId
+        $siteFolders = $selectedFolders | Where-Object { 
+            $_.DriveId -eq $siteDriveId
+        }
+        
+        if ($siteFolders -and $siteFolders.Count -gt 0) {
+            $user.folders += $siteFolders
+            Write-Verbose "Added $(($siteFolders | Measure-Object).Count) folders from site $($user.sites[$siteId].siteName) to user $($user.DisplayName)"
+        } else {
+            Write-Verbose "No matching folders found for user $($user.DisplayName) in site $($user.sites[$siteId].siteName)"
+        }
+    }
+}
+
+# Print summary of folder assignments
+Write-Host "`nFolder Assignment Summary:" -ForegroundColor Cyan
+foreach ($user in $users.list) {
+    $folderCount = ($user.folders | Measure-Object).Count
+    Write-Host "- $($user.DisplayName): $folderCount folders" -ForegroundColor White
+}
+
+# Display request statistics in a more appropriate way
+Write-Host "Request Statistics:" -ForegroundColor Cyan
+Write-Host "Total requests made: $($requests.counter)" -ForegroundColor Cyan
+
+# Only display succeeded requests if there are any
+if ($requests.succeeded.Count -gt 0) {
+    Write-Host "`nSuccessful Requests:" -ForegroundColor Green
+    $successTable = $requests.succeeded.GetEnumerator() | 
+        Select-Object @{Name='RequestId';Expression={$_.Key}}, 
+                     @{Name='Uri';Expression={$_.Value.Uri}}, 
+                     @{Name='Timestamp';Expression={$_.Value.Timestamp}}, 
+                     @{Name='HttpCode';Expression={$_.Value.HttpCode}} |
+        Format-Table -AutoSize | Out-String
+    Write-Host $successTable
+}
+else {
+    Write-Host "`nNo successful requests recorded." -ForegroundColor Yellow
+}
+
+# Only display failed requests if there are any
+if ($requests.failed.Count -gt 0) {
+    Write-Host "`nFailed Requests:" -ForegroundColor Red
+    $failedTable = $requests.failed.GetEnumerator() | 
+        Select-Object @{Name='RequestId';Expression={$_.Key}}, 
+                     @{Name='Uri';Expression={$_.Value.Uri}}, 
+                     @{Name='Timestamp';Expression={$_.Value.Timestamp}}, 
+                     @{Name='Error';Expression={$_.Value.Error}}, 
+                     @{Name='HttpCode';Expression={$_.Value.HttpCode}} |
+        Format-Table -AutoSize | Out-String
+    Write-Host $failedTable
+}
+else {
+    Write-Host "`nNo failed requests recorded." -ForegroundColor Yellow
+}
+
+# Output summary
+Write-Host "`nSummary:" -ForegroundColor Cyan
+Write-Host "- Total Requests: $($requests.counter)" -ForegroundColor White
+Write-Host "- Successful: $($requests.succeeded.Count)" -ForegroundColor Green
+Write-Host "- Failed: $($requests.failed.Count)" -ForegroundColor Red
+
 
 pause

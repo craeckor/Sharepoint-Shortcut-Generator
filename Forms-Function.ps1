@@ -902,3 +902,1093 @@ function Show-SiteSelectionForm {
     }
     return $selectedSites
 }
+
+function Show-FolderSelectionForm {
+    param (
+        [Parameter(Mandatory=$true)]
+        [array]$DriveList,
+        
+        [Parameter(Mandatory=$false)]
+        [string]$AccessToken
+    )
+
+    # State variables for navigation and selection
+    $script:currentPath = @{}
+    $script:navigationHistory = @{}
+    $script:checkedFolders = @{}
+    $script:isLoading = $false
+    $script:currentDriveId = $null
+    $script:currentItemId = $null
+    $script:currentItems = @()
+    $script:selectedDrive = $null
+
+    # Try to load icon with error handling
+    $Micon = $null
+    try {
+        $Micon = [System.Drawing.Icon]::ExtractAssociatedIcon("$workpath\images\icons\Microsoft_logo.ico")
+    } catch {
+        Write-Verbose "Unable to load icon: $_"
+    }
+
+    # Try to load folder icon
+    $folderIcon = $null
+    try {
+        $folderIcon = [System.Drawing.Icon]::ExtractAssociatedIcon("$workpath\images\icons\Folder_icon.ico")
+    } catch {
+        Write-Verbose "Unable to load folder icon: $_"
+    }
+    
+    $form = New-Object System.Windows.Forms.Form
+    $form.Text = "Select SharePoint Folders"
+    $form.Size = New-Object System.Drawing.Size(800, 600)
+    $form.StartPosition = "CenterScreen"
+    $form.FormBorderStyle = [System.Windows.Forms.FormBorderStyle]::FixedDialog
+    $form.MaximizeBox = $false
+    $form.MinimizeBox = $false
+    $form.TopMost = $true
+    if ($Micon) { $form.Icon = $Micon }
+    $form.Font = New-Object System.Drawing.Font("Arial", 9)
+    $form.BackColor = [System.Drawing.Color]::FromArgb(245, 245, 245)
+
+    # Create a consistent style for buttons
+    function Add-StyledButton {
+        param (
+            [string]$Text, 
+            [int]$X, 
+            [int]$Y, 
+            [int]$Width = 100, 
+            [int]$Height = 30,
+            [bool]$Primary = $false,
+            [bool]$Disabled = $false
+        )
+        
+        $button = New-Object System.Windows.Forms.Button
+        $button.Text = $Text
+        $button.Size = New-Object System.Drawing.Size($Width, $Height)
+        $button.Location = New-Object System.Drawing.Point($X, $Y)
+        $button.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
+        $button.Cursor = [System.Windows.Forms.Cursors]::Hand
+        $button.Enabled = -not $Disabled
+        
+        if ($Primary) {
+            $button.BackColor = [System.Drawing.Color]::FromArgb(0, 120, 215)
+            $button.ForeColor = [System.Drawing.Color]::White
+            $button.Font = New-Object System.Drawing.Font("Arial", 10, [System.Drawing.FontStyle]::Bold)
+            $button.FlatAppearance.BorderSize = 0
+            $button.FlatAppearance.MouseOverBackColor = [System.Drawing.Color]::FromArgb(0, 102, 204)
+            $button.FlatAppearance.MouseDownBackColor = [System.Drawing.Color]::FromArgb(0, 90, 180)
+        } else {
+            $button.BackColor = [System.Drawing.Color]::FromArgb(255, 255, 255)
+            $button.ForeColor = [System.Drawing.Color]::FromArgb(60, 60, 60)
+            $button.Font = New-Object System.Drawing.Font("Arial", 9)
+            $button.FlatAppearance.BorderColor = [System.Drawing.Color]::FromArgb(200, 200, 200)
+            $button.FlatAppearance.BorderSize = 1
+            $button.FlatAppearance.MouseOverBackColor = [System.Drawing.Color]::FromArgb(240, 240, 240)
+            $button.FlatAppearance.MouseDownBackColor = [System.Drawing.Color]::FromArgb(230, 230, 230)
+        }
+        
+        # If disabled, make it look disabled
+        if ($Disabled) {
+            $button.BackColor = [System.Drawing.Color]::FromArgb(230, 230, 230)
+            $button.ForeColor = [System.Drawing.Color]::FromArgb(150, 150, 150)
+        }
+        
+        return $button
+    }
+
+    # Create panel for the navigation elements
+    $navPanel = New-Object System.Windows.Forms.Panel
+    $navPanel.Size = New-Object System.Drawing.Size(760, 40)
+    $navPanel.Location = New-Object System.Drawing.Point(10, 10)
+    $navPanel.BackColor = [System.Drawing.Color]::White
+    $navPanel.BorderStyle = [System.Windows.Forms.BorderStyle]::FixedSingle
+
+    # Create drive selection dropdown
+    $driveLabel = New-Object System.Windows.Forms.Label
+    $driveLabel.Text = "Drive:"
+    $driveLabel.Size = New-Object System.Drawing.Size(40, 24)
+    $driveLabel.Location = New-Object System.Drawing.Point(10, 10)
+    $driveLabel.TextAlign = [System.Drawing.ContentAlignment]::MiddleLeft
+    $navPanel.Controls.Add($driveLabel)
+
+    $driveDropdown = New-Object System.Windows.Forms.ComboBox
+    $driveDropdown.Size = New-Object System.Drawing.Size(300, 24)
+    $driveDropdown.Location = New-Object System.Drawing.Point(60, 8)
+    $driveDropdown.DropDownStyle = [System.Windows.Forms.ComboBoxStyle]::DropDownList
+    $driveDropdown.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
+    $navPanel.Controls.Add($driveDropdown)
+
+    # Add drives to the dropdown
+    foreach ($drive in $DriveList) {
+        $driveName = if ($drive.name) { $drive.name } else { "Documents" }
+        $siteDisplayName = if ($drive.siteDisplayName) { $drive.siteDisplayName } else { "SharePoint" }
+        $displayText = "$siteDisplayName - $driveName"
+        
+        # Add the drive ID as Tag to retrieve it later
+        $driveItem = New-Object System.Windows.Forms.ComboBox
+        $driveItem = $displayText
+        $driveDropdown.Items.Add($driveItem) | Out-Null
+    }
+
+    # Back button with proper Unicode character
+    $backButton = Add-StyledButton -Text "Back" -X 370 -Y 6 -Width 80 -Height 25 -Disabled $true
+    $navPanel.Controls.Add($backButton)
+
+    # Refresh button with proper Unicode character
+    $refreshButton = Add-StyledButton -Text "Refresh" -X 460 -Y 6 -Width 80 -Height 25
+    $navPanel.Controls.Add($refreshButton)
+
+    # Add a button to select the current folder
+    $selectCurrentButton = Add-StyledButton -Text "Select Current" -X 550 -Y 6 -Width 110 -Height 25
+    $navPanel.Controls.Add($selectCurrentButton)
+
+    $form.Controls.Add($navPanel)
+
+    # Create a new path panel below the navigation panel
+    $pathPanel = New-Object System.Windows.Forms.Panel
+    $pathPanel.Size = New-Object System.Drawing.Size(760, 30)
+    $pathPanel.Location = New-Object System.Drawing.Point(10, 60) # Place it right below the nav panel
+    $pathPanel.BackColor = [System.Drawing.Color]::White
+    $pathPanel.BorderStyle = [System.Windows.Forms.BorderStyle]::FixedSingle
+
+    # Add a more descriptive path label
+    $pathDescLabel = New-Object System.Windows.Forms.Label
+    $pathDescLabel.Text = "Current Path:"
+    $pathDescLabel.Size = New-Object System.Drawing.Size(90, 24)
+    $pathDescLabel.Location = New-Object System.Drawing.Point(10, 3)
+    $pathDescLabel.TextAlign = [System.Drawing.ContentAlignment]::MiddleLeft
+    $pathDescLabel.Font = New-Object System.Drawing.Font("Arial", 9, [System.Drawing.FontStyle]::Bold)
+    $pathPanel.Controls.Add($pathDescLabel)
+
+    # Create a better path display with more room
+    $pathLabel = New-Object System.Windows.Forms.Label
+    $pathLabel.Size = New-Object System.Drawing.Size(650, 24)
+    $pathLabel.Location = New-Object System.Drawing.Point(100, 3)
+    $pathLabel.TextAlign = [System.Drawing.ContentAlignment]::MiddleLeft
+    $pathLabel.Text = "/ (Root)"
+    $pathLabel.Font = New-Object System.Drawing.Font("Arial", 9)
+    $pathPanel.Controls.Add($pathLabel)
+
+    $form.Controls.Add($pathPanel)
+
+    # Add search panel to folder selection form, after the path panel
+    $searchPanel = New-Object System.Windows.Forms.Panel
+    $searchPanel.Size = New-Object System.Drawing.Size(760, 40)
+    $searchPanel.Location = New-Object System.Drawing.Point(10, 100) # Position below path panel
+    $searchPanel.BackColor = [System.Drawing.Color]::White
+    $searchPanel.BorderStyle = [System.Windows.Forms.BorderStyle]::FixedSingle
+
+    # Create search icon using PictureBox
+    $searchIconBox = New-Object System.Windows.Forms.PictureBox
+    $searchIconBox.Size = New-Object System.Drawing.Size(20, 20)
+    $searchIconBox.Location = New-Object System.Drawing.Point(15, 10)
+    $searchIconBox.SizeMode = [System.Windows.Forms.PictureBoxSizeMode]::Zoom
+
+    # Load the search icon with error handling
+    try {
+        $searchIcon = [System.Drawing.Icon]::ExtractAssociatedIcon("$workpath\images\icons\Search_icon.ico")
+        $searchIconBox.Image = $searchIcon.ToBitmap()
+        $searchPanel.Controls.Add($searchIconBox)
+    } catch {
+        Write-Verbose "Unable to load search icon: $_"
+        # If icon fails to load, don't add anything to maintain clean layout
+    }
+
+    # Enhanced search box with adjusted position
+    $searchBox = New-Object System.Windows.Forms.TextBox
+    $searchBox.Size = New-Object System.Drawing.Size(700, 25)
+    $searchBox.Location = New-Object System.Drawing.Point(45, 8) # Adjusted position for icon
+    $searchBox.Font = New-Object System.Drawing.Font("Arial", 10)
+    $searchBox.BorderStyle = [System.Windows.Forms.BorderStyle]::None
+    $searchBox.BackColor = [System.Drawing.Color]::White
+    $searchBox.ForeColor = [System.Drawing.Color]::Gray
+    $searchBox.Text = "Search folders..."
+    $searchPanel.Controls.Add($searchBox)
+
+    # Add event handlers for placeholder behavior
+    $searchBox.Add_GotFocus({
+        if ($this.Text -eq "Search folders...") {
+            $this.Text = ""
+            $this.ForeColor = [System.Drawing.Color]::FromArgb(60, 60, 60)
+        }
+    })
+
+    $searchBox.Add_LostFocus({
+        if ([string]::IsNullOrWhiteSpace($this.Text)) {
+            $this.Text = "Search folders..."
+            $this.ForeColor = [System.Drawing.Color]::Gray
+        }
+    })
+
+    # Add search functionality - handles filtering the visible folders
+    $searchBox.add_TextChanged({
+        # Skip search when showing placeholder text or during loading
+        if ($script:isLoading -or ($searchBox.Text -eq "Search folders..." -or $null -eq $searchBox.Text)) {
+            return
+        }
+        
+        $searchText = $searchBox.Text.ToLower()
+        $dataGridView.SuspendLayout()
+        $dataGridView.Rows.Clear()
+        
+        # Get folder icon
+        $folderBitmap = $null
+        if ($folderIcon) {
+            $folderBitmap = $folderIcon.ToBitmap()
+        }
+        
+        # Filter current items based on search text
+        $filteredItems = @()
+        if ($searchText -ne "") {
+            # Apply filter
+            $filteredItems = $script:currentItems | Where-Object { 
+                $null -ne $_.folder -and $_.name -like "*$searchText*" 
+            }
+        } else {
+            # No filter - show all folders
+            $filteredItems = $script:currentItems | Where-Object { $null -ne $_.folder }
+        }
+        
+        # Add filtered items to grid
+        foreach ($item in $filteredItems) {
+            $isChecked = $false
+            $folderKey = "$script:currentDriveId|$($item.id)"
+            
+            # Check if this folder is already selected
+            if ($script:checkedFolders.ContainsKey($folderKey)) {
+                $isChecked = $script:checkedFolders[$folderKey]
+            }
+            
+            # Add folder to grid
+            $childCount = if ($item.folder.childCount) { $item.folder.childCount } else { 0 }
+            $size = if ($item.size) { Format-FileSize -Size $item.size } else { "0 B" }
+            
+            $row = $dataGridView.Rows.Add(
+                $isChecked,
+                $folderBitmap,
+                $item.name,
+                "Folder",
+                $size,
+                $childCount,
+                $item.id
+            )
+            
+            # Store checkbox state
+            $script:checkedFolders[$folderKey] = $isChecked
+        }
+        
+        $dataGridView.ResumeLayout()
+        
+        # Update selection count for currently visible items
+        Update-SelectionCount
+    })
+
+    $form.Controls.Add($searchPanel)
+
+    # Create loading panel with animation
+    $loadingPanel = New-Object System.Windows.Forms.Panel
+    $loadingPanel.Size = New-Object System.Drawing.Size(760, 350)
+    $loadingPanel.Location = New-Object System.Drawing.Point(10, 150)
+    $loadingPanel.BackColor = [System.Drawing.Color]::FromArgb(240, 240, 240)
+    $loadingPanel.Visible = $false
+
+    # For the loading indicator, let's use a simple label-based approach instead of a GIF
+    $loadingLabel = New-Object System.Windows.Forms.Label
+    $loadingLabel.Text = "Loading folders..."
+    $loadingLabel.Size = New-Object System.Drawing.Size(760, 400)
+    $loadingLabel.TextAlign = [System.Drawing.ContentAlignment]::MiddleCenter
+    $loadingLabel.Font = New-Object System.Drawing.Font("Arial", 12, [System.Drawing.FontStyle]::Bold)
+    $loadingLabel.ForeColor = [System.Drawing.Color]::FromArgb(0, 120, 215)
+    $loadingPanel.Controls.Add($loadingLabel)
+    $form.Controls.Add($loadingPanel)
+
+    # Create the DataGridView
+    $dataGridView = New-Object System.Windows.Forms.DataGridView
+    $dataGridView.Size = New-Object System.Drawing.Size(760, 350)
+    $dataGridView.Location = New-Object System.Drawing.Point(10, 150)
+    $dataGridView.AllowUserToAddRows = $false
+    $dataGridView.AllowUserToDeleteRows = $false
+    $dataGridView.SelectionMode = 'FullRowSelect'
+    $dataGridView.MultiSelect = $false
+    $dataGridView.RowHeadersVisible = $false
+    $dataGridView.AutoSizeColumnsMode = 'Fill'
+    $dataGridView.ScrollBars = 'Vertical'
+    $dataGridView.BackgroundColor = [System.Drawing.Color]::White
+    $dataGridView.BorderStyle = [System.Windows.Forms.BorderStyle]::None
+    $dataGridView.Font = New-Object System.Drawing.Font("Arial", 9)
+    $dataGridView.GridColor = [System.Drawing.Color]::FromArgb(230, 230, 230)
+    $dataGridView.RowTemplate.Height = 36
+    $dataGridView.CellBorderStyle = [System.Windows.Forms.DataGridViewCellBorderStyle]::SingleHorizontal
+    $dataGridView.RowsDefaultCellStyle.SelectionBackColor = [System.Drawing.Color]::FromArgb(245, 249, 255)
+    $dataGridView.RowsDefaultCellStyle.SelectionForeColor = [System.Drawing.Color]::Black
+    $dataGridView.AlternatingRowsDefaultCellStyle.BackColor = [System.Drawing.Color]::FromArgb(250, 250, 250)
+
+    # Create columns
+    $checkColumn = New-Object System.Windows.Forms.DataGridViewCheckBoxColumn
+    $checkColumn.HeaderText = "Select"
+    $checkColumn.Width = 60
+    $checkColumn.Name = "Include"
+    $checkColumn.ReadOnly = $false
+    $checkColumn.FillWeight = 10
+    $dataGridView.Columns.Add($checkColumn) | Out-Null
+
+    # Helper function to create read-only columns
+    function Add-ReadOnlyColumn {
+        param (
+            [string]$Name,
+            [string]$HeaderText,
+            [int]$FillWeight = 30
+        )
+        
+        $column = New-Object System.Windows.Forms.DataGridViewTextBoxColumn
+        $column.Name = $Name
+        $column.HeaderText = $HeaderText
+        $column.ReadOnly = $true
+        $column.FillWeight = $FillWeight
+        $column.SortMode = [System.Windows.Forms.DataGridViewColumnSortMode]::Automatic
+        $column.DefaultCellStyle.Padding = New-Object System.Windows.Forms.Padding(5, 0, 0, 0)
+        return $column
+    }
+
+    # Create image column for folder icon
+    $iconColumn = New-Object System.Windows.Forms.DataGridViewImageColumn
+    $iconColumn.HeaderText = ""
+    $iconColumn.Width = 30
+    $iconColumn.Name = "Icon"
+    $iconColumn.ReadOnly = $true
+    $iconColumn.FillWeight = 5
+    $iconColumn.ValueType = [System.Drawing.Image]
+    $dataGridView.Columns.Add($iconColumn) | Out-Null
+
+    $nameColumn = Add-ReadOnlyColumn -Name "Name" -HeaderText "Folder Name" -FillWeight 40
+    $typeColumn = Add-ReadOnlyColumn -Name "Type" -HeaderText "Type" -FillWeight 15
+    $sizeColumn = Add-ReadOnlyColumn -Name "Size" -HeaderText "Size" -FillWeight 15
+    $itemCountColumn = Add-ReadOnlyColumn -Name "Items" -HeaderText "Items" -FillWeight 10
+    $idColumn = Add-ReadOnlyColumn -Name "Id" -HeaderText "ID" -FillWeight 1
+    
+    $dataGridView.Columns.Add($nameColumn) | Out-Null
+    $dataGridView.Columns.Add($typeColumn) | Out-Null
+    $dataGridView.Columns.Add($sizeColumn) | Out-Null
+    $dataGridView.Columns.Add($itemCountColumn) | Out-Null
+    $dataGridView.Columns.Add($idColumn) | Out-Null
+    
+    # Hide the ID column
+    $dataGridView.Columns[6].Visible = $false
+
+    # Style the header
+    $dataGridView.ColumnHeadersDefaultCellStyle.Font = New-Object System.Drawing.Font("Arial", 9, [System.Drawing.FontStyle]::Bold)
+    $dataGridView.ColumnHeadersDefaultCellStyle.BackColor = [System.Drawing.Color]::FromArgb(240, 240, 240)
+    $dataGridView.ColumnHeadersDefaultCellStyle.ForeColor = [System.Drawing.Color]::FromArgb(50, 50, 50)
+    $dataGridView.ColumnHeadersDefaultCellStyle.Padding = New-Object System.Windows.Forms.Padding(5, 0, 0, 0)
+    $dataGridView.ColumnHeadersHeightSizeMode = [System.Windows.Forms.DataGridViewColumnHeadersHeightSizeMode]::DisableResizing
+    $dataGridView.ColumnHeadersHeight = 35
+    $dataGridView.EnableHeadersVisualStyles = $false
+
+    $form.Controls.Add($dataGridView)
+
+    # Create the bottom panel with buttons
+    $bottomPanel = New-Object System.Windows.Forms.Panel
+    $bottomPanel.Size = New-Object System.Drawing.Size(760, 50)
+    $bottomPanel.Location = New-Object System.Drawing.Point(10, 500)
+    $bottomPanel.BackColor = [System.Drawing.Color]::FromArgb(245, 245, 245)
+
+    # Create buttons
+    $selectAllButton = Add-StyledButton -Text "Select All" -X 10 -Y 10
+    $bottomPanel.Controls.Add($selectAllButton)
+
+    $deselectAllButton = Add-StyledButton -Text "Deselect All" -X 120 -Y 10
+    $bottomPanel.Controls.Add($deselectAllButton)
+
+    # Add a count indicator label
+    $countLabel = New-Object System.Windows.Forms.Label
+    $countLabel.Size = New-Object System.Drawing.Size(280, 23)
+    $countLabel.Location = New-Object System.Drawing.Point(230, 14)
+    $countLabel.Font = New-Object System.Drawing.Font("Arial", 9)
+    $countLabel.ForeColor = [System.Drawing.Color]::FromArgb(60, 60, 60)
+    $countLabel.TextAlign = [System.Drawing.ContentAlignment]::MiddleLeft
+    $countLabel.Text = "0 of 0 folders selected"
+    $bottomPanel.Controls.Add($countLabel)
+
+    $okButton = Add-StyledButton -Text "OK" -X 640 -Y 10 -Width 100 -Height 35 -Primary $true
+    $okButton.DialogResult = [System.Windows.Forms.DialogResult]::OK
+    $bottomPanel.Controls.Add($okButton)
+
+    $form.Controls.Add($bottomPanel)
+
+    # Function to update selection count
+    function Update-SelectionCount {
+        # Count currently visible folders that are selected
+        $visibleFoldersCount = $dataGridView.Rows.Count
+        $visibleSelectedCount = 0
+        
+        for ($i = 0; $i -lt $dataGridView.Rows.Count; $i++) {
+            $isChecked = $dataGridView.Rows[$i].Cells[0].Value -eq $true
+            if ($isChecked) {
+                $visibleSelectedCount++
+            }
+        }
+        
+        # Count total selected folders across all views
+        $totalSelectedCount = ($script:checkedFolders.Values | Where-Object { $_ -eq $true }).Count
+        
+        # Check if the current folder is selected but not visible in grid (e.g., root folder)
+        $currentFolderKey = "$script:currentDriveId|$script:currentItemId"
+        $currentFolderSelected = $script:checkedFolders.ContainsKey($currentFolderKey) -and $script:checkedFolders[$currentFolderKey] -eq $true
+        
+        # Update the label to show both visible folders and total selected
+        $countLabel.Text = "$visibleSelectedCount of $visibleFoldersCount folders shown | $totalSelectedCount total selected"
+    }
+
+    # Function to show loading overlay
+    function Show-Loading {
+        param([string]$message = "Loading folders...")
+        
+        $script:isLoading = $true
+        $loadingLabel.Text = $message
+        $loadingPanel.Visible = $true
+        $dataGridView.Visible = $false
+        $form.Refresh()
+    }
+
+    # Function to hide loading overlay
+    function Hide-Loading {
+        $script:isLoading = $false
+        $loadingPanel.Visible = $false
+        $dataGridView.Visible = $true
+        $form.Refresh()
+    }
+
+    # Helper function to convert bytes to human-readable format
+    function Format-FileSize {
+        param([long]$Size)
+        
+        if ($Size -lt 1KB) {
+            return "$Size B"
+        }
+        elseif ($Size -lt 1MB) {
+            return "{0:N1} KB" -f ($Size / 1KB)
+        }
+        elseif ($Size -lt 1GB) {
+            return "{0:N1} MB" -f ($Size / 1MB)
+        }
+        else {
+            return "{0:N2} GB" -f ($Size / 1GB)
+        }
+    }
+
+    # Function to load folder items
+    function Load-FolderItems {
+        param(
+            [string]$DriveId,
+            [string]$ItemId,
+            [bool]$IsRoot = $false
+        )
+        
+        Show-Loading -message "Loading folders..."
+
+        $searchBox.Text = "Search folders..."
+        $searchBox.ForeColor = [System.Drawing.Color]::Gray
+        
+        try {
+            $script:currentDriveId = $DriveId
+            
+            if ($IsRoot) {
+                # Initialize or clear navigation history for this drive
+                if (-not $script:navigationHistory.ContainsKey($DriveId)) {
+                    $script:navigationHistory[$DriveId] = @()
+                }
+                
+                # Get root folder ID
+                $rootUrl = "$graphEndpoint/drives/$DriveId/root"
+                $rootResponse = Get-GraphRequest -Uri $rootUrl -AccessToken $AccessToken
+                $rootObject = $rootResponse | ConvertFrom-Json
+                $script:currentItemId = $rootObject.id
+                
+                # Update path tracking
+                $script:currentPath[$DriveId] = @{
+                    "path" = "/"
+                    "id" = $rootObject.id
+                    "name" = "Root"
+                }
+                
+                # Clear navigation history for this drive and add root
+                $script:navigationHistory[$DriveId] = @(@{
+                    "id" = $rootObject.id
+                    "name" = "Root"
+                    "path" = "/"
+                })
+                
+                # Set the path label
+                $pathLabel.Text = "/ (Root)"
+                
+                # Load children of root
+                $childrenUrl = "$graphEndpoint/drives/$DriveId/items/$($rootObject.id)/children"
+                $ItemId = $rootObject.id
+            } else {
+                # Load children of specified item
+                $childrenUrl = "$graphEndpoint/drives/$DriveId/items/$ItemId/children"
+                
+                # Get parent item details for navigation path
+                $itemUrl = "$graphEndpoint/drives/$DriveId/items/$ItemId"
+                $itemResponse = Get-GraphRequest -Uri $itemUrl -AccessToken $AccessToken
+                $itemObject = $itemResponse | ConvertFrom-Json
+                
+                # If navigating to a new folder (not refreshing)
+                if ($script:currentItemId -ne $ItemId) {
+                    # Update current path - completely replacing the logic to prevent duplication
+                    $pathParts = @()
+                    
+                    # Get the complete path from the parent reference if available
+                    if ($itemObject.parentReference -and $itemObject.parentReference.path) {
+                        try {
+                            # The path often comes in format like "/drives/id/root:/path/to/folder"
+                            # Split by ":" and take the second part if it exists
+                            $parentPath = $itemObject.parentReference.path
+                            if ($parentPath -match ":/(.+)") {
+                                $pathParts += $Matches[1].Split("/") | Where-Object { $_ -ne "" }
+                            }
+                        } catch {
+                            # If we can't parse the path, just use what we know
+                            Write-Verbose "Could not parse parent path: $_"
+                        }
+                    }
+                    
+                    # Add the current folder name
+                    $pathParts += $itemObject.name
+                    
+                    # Reconstruct the path
+                    $newPath = "/" + ($pathParts -join "/")
+                    
+                    $script:currentPath[$DriveId] = @{
+                        "path" = $newPath
+                        "id" = $ItemId
+                        "name" = $itemObject.name
+                    }
+                    
+                    # Add to navigation history
+                    $alreadyInHistory = $false
+                    foreach ($item in $script:navigationHistory[$DriveId]) {
+                        if ($item.id -eq $ItemId) {
+                            $alreadyInHistory = $true
+                            break
+                        }
+                    }
+                    
+                    if (-not $alreadyInHistory) {
+                        $script:navigationHistory[$DriveId] += @{
+                            "id" = $ItemId
+                            "name" = $itemObject.name
+                            "path" = $newPath
+                        }
+                    }
+                }
+                
+                # Update path label
+                $pathLabel.Text = $script:currentPath[$DriveId].path
+            }
+            
+            # Store current item ID
+            $script:currentItemId = $ItemId
+            
+            # Get children
+            $response = Get-GraphRequest -Uri $childrenUrl -AccessToken $AccessToken
+            $items = ($response | ConvertFrom-Json).value
+            
+            # Store current items
+            $script:currentItems = $items
+            
+            # Update back button state - this is the key fix
+            # Since we store history in an array, we need at least 2 items (root + current) to enable back
+            $backButton.Enabled = ($script:navigationHistory[$DriveId].Count -gt 1)
+            # Force a refresh of the back button's appearance
+            $backButton.BackColor = if ($backButton.Enabled) {
+                [System.Drawing.Color]::FromArgb(255, 255, 255)  # Normal color when enabled
+            } else {
+                [System.Drawing.Color]::FromArgb(230, 230, 230)  # Disabled color
+            }
+            $backButton.ForeColor = if ($backButton.Enabled) {
+                [System.Drawing.Color]::FromArgb(60, 60, 60)     # Normal text color
+            } else {
+                [System.Drawing.Color]::FromArgb(150, 150, 150)  # Disabled text color
+            }
+            $backButton.Refresh()
+            
+            # Clear and populate the grid
+            $dataGridView.SuspendLayout()
+            $dataGridView.Rows.Clear()
+            
+            # Convert folder icon to bitmap if available
+            $folderBitmap = $null
+            if ($folderIcon) {
+                $folderBitmap = $folderIcon.ToBitmap()
+            }
+            
+            # Add items to grid - folders only
+            foreach ($item in $items | Where-Object { $null -ne $_.folder }) {
+                $isChecked = $false
+                $folderKey = "$DriveId|$($item.id)"
+                
+                # Check if this folder is already selected
+                if ($script:checkedFolders.ContainsKey($folderKey)) {
+                    $isChecked = $script:checkedFolders[$folderKey]
+                }
+                
+                # Add folder to grid
+                $childCount = if ($item.folder.childCount) { $item.folder.childCount } else { 0 }
+                $size = if ($item.size) { Format-FileSize -Size $item.size } else { "0 B" }
+                
+                $row = $dataGridView.Rows.Add(
+                    $isChecked,
+                    $folderBitmap,
+                    $item.name,
+                    "Folder",
+                    $size,
+                    $childCount,
+                    $item.id
+                )
+                
+                # Store checkbox state
+                $script:checkedFolders[$folderKey] = $isChecked
+            }
+            
+            $dataGridView.ResumeLayout()
+            
+            # Update the selection count
+            Update-SelectionCount
+            
+            # Update the select current button text after navigation
+            $currentFolderKey = "$script:currentDriveId|$script:currentItemId"
+            if ($script:checkedFolders.ContainsKey($currentFolderKey) -and $script:checkedFolders[$currentFolderKey] -eq $true) {
+                $selectCurrentButton.Text = "Unselect Current"
+            } else {
+                $selectCurrentButton.Text = "Select Current"
+            }
+
+            Hide-Loading
+        }
+        catch {
+            $errorMessage = "Error loading folders: $($_.Exception.Message)"
+            Write-Error $errorMessage
+            $loadingLabel.Text = $errorMessage
+            Start-Sleep -Seconds 3
+
+            # Update the select current button text based on selection state
+            $currentFolderKey = "$DriveId|$script:currentItemId"
+            if ($script:checkedFolders.ContainsKey($currentFolderKey) -and $script:checkedFolders[$currentFolderKey] -eq $true) {
+                $selectCurrentButton.Text = "Unselect Current"
+            } else {
+                $selectCurrentButton.Text = "Select Current"
+            }
+
+            # Update the select current button text after navigation
+            $currentFolderKey = "$script:currentDriveId|$script:currentItemId"
+            if ($script:checkedFolders.ContainsKey($currentFolderKey) -and $script:checkedFolders[$currentFolderKey] -eq $true) {
+                $selectCurrentButton.Text = "Unselect Current"
+            } else {
+                $selectCurrentButton.Text = "Select Current"
+            }
+
+            Hide-Loading
+        }
+    }
+
+    # Function to navigate back
+    function Navigate-Back {
+        if ($script:navigationHistory[$script:currentDriveId].Count -le 1) {
+            return
+        }
+        
+        # Remove current from history
+        $historyCount = $script:navigationHistory[$script:currentDriveId].Count
+        $script:navigationHistory[$script:currentDriveId] = $script:navigationHistory[$script:currentDriveId][0..($historyCount - 2)]
+        
+        # Get previous item
+        $previous = $script:navigationHistory[$script:currentDriveId][-1]
+        
+        # Load previous folder
+        if ($previous.id -eq $script:navigationHistory[$script:currentDriveId][0].id) {
+            # We're going back to root
+            Load-FolderItems -DriveId $script:currentDriveId -IsRoot $true
+        } else {
+            # Going back to a subfolder
+            $script:currentPath[$script:currentDriveId] = @{
+                "path" = $previous.path
+                "id" = $previous.id
+                "name" = $previous.name
+            }
+            $pathLabel.Text = $previous.path
+            Load-FolderItems -DriveId $script:currentDriveId -ItemId $previous.id -IsRoot $false
+        }
+        
+        # Update back button state after navigation
+        $backButton.Enabled = ($script:navigationHistory[$script:currentDriveId].Count -gt 1)
+        # Force a refresh of the back button's appearance
+        $backButton.BackColor = if ($backButton.Enabled) {
+            [System.Drawing.Color]::FromArgb(255, 255, 255)
+        } else {
+            [System.Drawing.Color]::FromArgb(230, 230, 230)
+        }
+        $backButton.ForeColor = if ($backButton.Enabled) {
+            [System.Drawing.Color]::FromArgb(60, 60, 60)
+        } else {
+            [System.Drawing.Color]::FromArgb(150, 150, 150)
+        }
+        $backButton.Refresh()
+
+        # Update the select current button text after navigation
+        $currentFolderKey = "$script:currentDriveId|$script:currentItemId"
+        if ($script:checkedFolders.ContainsKey($currentFolderKey) -and $script:checkedFolders[$currentFolderKey] -eq $true) {
+            $selectCurrentButton.Text = "Unselect Current"
+        } else {
+            $selectCurrentButton.Text = "Select Current"
+        }
+    }
+
+    # Function to select the current folder
+    function Select-CurrentFolder {
+        if ($null -ne $script:currentDriveId -and $null -ne $script:currentItemId) {
+            $folderKey = "$script:currentDriveId|$script:currentItemId"
+            $folderName = if ($script:currentPath[$script:currentDriveId].path -eq "/") { "Root" } else { $script:currentPath[$script:currentDriveId].name }
+            
+            # Check if folder is already selected
+            if ($script:checkedFolders.ContainsKey($folderKey) -and $script:checkedFolders[$folderKey] -eq $true) {
+                # Folder is already selected, so unselect it
+                $script:checkedFolders[$folderKey] = $false
+                
+                # Update the button text
+                $selectCurrentButton.Text = "Select Current"
+                
+                # Update any visible corresponding row
+                for ($i = 0; $i -lt $dataGridView.Rows.Count; $i++) {
+                    if ($dataGridView.Rows[$i].Cells[6].Value -eq $script:currentItemId) {
+                        $dataGridView.Rows[$i].Cells[0].Value = $false
+                        break
+                    }
+                }
+                
+                # Update the counts
+                Update-SelectionCount
+                
+                # Show success message
+                [System.Windows.Forms.MessageBox]::Show(
+                    "Current folder removed from selection: $folderName",
+                    "Folder Unselected",
+                    [System.Windows.Forms.MessageBoxButtons]::OK,
+                    [System.Windows.Forms.MessageBoxIcon]::Information
+                )
+            } else {
+                # Select the folder
+                $script:checkedFolders[$folderKey] = $true
+                
+                # Update the button text
+                $selectCurrentButton.Text = "Unselect Current"
+                
+                # Update any visible corresponding row
+                for ($i = 0; $i -lt $dataGridView.Rows.Count; $i++) {
+                    if ($dataGridView.Rows[$i].Cells[6].Value -eq $script:currentItemId) {
+                        $dataGridView.Rows[$i].Cells[0].Value = $true
+                        break
+                    }
+                }
+                
+                # Update the counts
+                Update-SelectionCount
+                
+                # Show success message
+                [System.Windows.Forms.MessageBox]::Show(
+                    "Current folder added to selection: $folderName",
+                    "Folder Selected",
+                    [System.Windows.Forms.MessageBoxButtons]::OK,
+                    [System.Windows.Forms.MessageBoxIcon]::Information
+                )
+            }
+        }
+    }
+
+    # Event handler for selecting a drive
+    $driveDropdown.add_SelectedIndexChanged({
+        if ($driveDropdown.SelectedIndex -ge 0) {
+            $driveIndex = $driveDropdown.SelectedIndex
+            $script:selectedDrive = $DriveList[$driveIndex].id
+            
+            # Load root of selected drive
+            Load-FolderItems -DriveId $script:selectedDrive -IsRoot $true
+        }
+    })
+
+    # Event handler for back button
+    $backButton.add_Click({
+        Navigate-Back
+    })
+
+    # Event handler for refresh button
+    $refreshButton.add_Click({
+        if ($null -ne $script:currentDriveId -and $null -ne $script:currentItemId) {
+            # Just refresh the current folder - don't change the path
+            $childrenUrl = "$graphEndpoint/drives/$script:currentDriveId/items/$script:currentItemId/children"
+            Show-Loading -message "Refreshing folders..."
+            
+            
+            try {
+                # Get children
+                $response = Get-GraphRequest -Uri $childrenUrl -AccessToken $AccessToken
+                $items = ($response | ConvertFrom-Json).value
+                
+                # Store current items
+                $script:currentItems = $items
+                
+                # Clear and populate the grid
+                $dataGridView.SuspendLayout()
+                $dataGridView.Rows.Clear()
+                
+                # Convert folder icon to bitmap if available
+                $folderBitmap = $null
+                if ($folderIcon) {
+                    $folderBitmap = $folderIcon.ToBitmap()
+                }
+                
+                # Add items to grid - folders only
+                foreach ($item in $items | Where-Object { $null -ne $_.folder }) {
+                    $isChecked = $false
+                    $folderKey = "$script:currentDriveId|$($item.id)"
+                    
+                    # Check if this folder is already selected
+                    if ($script:checkedFolders.ContainsKey($folderKey)) {
+                        $isChecked = $script:checkedFolders[$folderKey]
+                    }
+                    
+                    # Add folder to grid
+                    $childCount = if ($item.folder.childCount) { $item.folder.childCount } else { 0 }
+                    $size = if ($item.size) { Format-FileSize -Size $item.size } else { "0 B" }
+                    
+                    $row = $dataGridView.Rows.Add(
+                        $isChecked,
+                        $folderBitmap,
+                        $item.name,
+                        "Folder",
+                        $size,
+                        $childCount,
+                        $item.id
+                    )
+                    
+                    # Store checkbox state
+                    $script:checkedFolders[$folderKey] = $isChecked
+                }
+                
+                $dataGridView.ResumeLayout()
+                
+                # Update the selection count
+                Update-SelectionCount
+
+                # Update the select current button text based on selection state
+                $folderKey = "$DriveId|$script:currentItemId"
+                if ($script:checkedFolders.ContainsKey($folderKey) -and $script:checkedFolders[$folderKey] -eq $true) {
+                    $selectCurrentButton.Text = "Unselect Current"
+                } else {
+                    $selectCurrentButton.Text = "Select Current"
+                }
+                
+                # Update the select current button text after navigation
+                $currentFolderKey = "$script:currentDriveId|$script:currentItemId"
+                if ($script:checkedFolders.ContainsKey($currentFolderKey) -and $script:checkedFolders[$currentFolderKey] -eq $true) {
+                    $selectCurrentButton.Text = "Unselect Current"
+                } else {
+                    $selectCurrentButton.Text = "Select Current"
+                }
+
+                Hide-Loading
+            } catch {
+                $errorMessage = "Error refreshing folders: $($_.Exception.Message)"
+                Write-Error $errorMessage
+                $loadingLabel.Text = $errorMessage
+                Start-Sleep -Seconds 3
+
+                # Update the select current button text based on selection state
+                $folderKey = "$DriveId|$script:currentItemId"
+                if ($script:checkedFolders.ContainsKey($folderKey) -and $script:checkedFolders[$folderKey] -eq $true) {
+                    $selectCurrentButton.Text = "Unselect Current"
+                } else {
+                    $selectCurrentButton.Text = "Select Current"
+                }
+
+                # Update the select current button text after navigation
+                $currentFolderKey = "$script:currentDriveId|$script:currentItemId"
+                if ($script:checkedFolders.ContainsKey($currentFolderKey) -and $script:checkedFolders[$currentFolderKey] -eq $true) {
+                    $selectCurrentButton.Text = "Unselect Current"
+                } else {
+                    $selectCurrentButton.Text = "Select Current"
+                }
+
+                Hide-Loading
+            }
+        } elseif ($null -ne $script:selectedDrive) {
+            Load-FolderItems -DriveId $script:selectedDrive -IsRoot $true
+        }
+    })
+
+    # Event handler for the select current folder button
+    $selectCurrentButton.add_Click({
+        Select-CurrentFolder
+    })
+
+    # Event handlers for DataGridView
+    $dataGridView.add_CellValueChanged({
+        param($sender, $e)
+        if ($e.ColumnIndex -eq 0 -and $e.RowIndex -ge 0) {
+            $row = $dataGridView.Rows[$e.RowIndex]
+            $itemId = $row.Cells[6].Value
+            $folderKey = "$script:currentDriveId|$itemId"
+            $script:checkedFolders[$folderKey] = $row.Cells[0].Value
+            Update-SelectionCount
+        }
+    })
+
+    $dataGridView.add_CurrentCellDirtyStateChanged({
+        if ($dataGridView.IsCurrentCellDirty -and $dataGridView.CurrentCell.ColumnIndex -eq 0) {
+            $dataGridView.CommitEdit([System.Windows.Forms.DataGridViewDataErrorContexts]::Commit)
+        }
+    })
+
+    # Event handler for double-click on a row to navigate into folder
+    $dataGridView.add_CellContentDoubleClick({
+        param($sender, $e)
+        if ($e.RowIndex -ge 0 -and ($e.ColumnIndex -eq 1 -or $e.ColumnIndex -eq 2)) {
+            $itemId = $dataGridView.Rows[$e.RowIndex].Cells[6].Value
+            Load-FolderItems -DriveId $script:currentDriveId -ItemId $itemId -IsRoot $false
+        }
+    })
+
+    # Enhanced checkbox appearance using CellPainting event
+    $dataGridView.add_CellPainting({
+        param($sender, $e)
+        
+        # Only customize the checkbox column
+        if ($e.ColumnIndex -eq 0 -and $e.RowIndex -ge 0) {
+            $e.PaintBackground($e.CellBounds, $true)
+            
+            $checkboxSize = 16
+            $x = $e.CellBounds.X + ($e.CellBounds.Width - $checkboxSize) / 2
+            $y = $e.CellBounds.Y + ($e.CellBounds.Height - $checkboxSize) / 2
+            
+            $checkboxRect = New-Object System.Drawing.Rectangle($x, $y, $checkboxSize, $checkboxSize)
+            
+            $isChecked = $e.Value -eq $true
+            
+            $borderColor = [System.Drawing.Color]::FromArgb(180, 180, 180)
+            $fillColor = [System.Drawing.Color]::White
+            $checkColor = [System.Drawing.Color]::FromArgb(0, 120, 215)
+            
+            if ($isChecked) {
+                $fillColor = [System.Drawing.Color]::FromArgb(0, 120, 215)
+                $borderColor = [System.Drawing.Color]::FromArgb(0, 100, 200)
+            }
+            
+            # Draw checkbox
+            $pen = New-Object System.Drawing.Pen($borderColor, 1)
+            $brush = New-Object System.Drawing.SolidBrush($fillColor)
+            
+            $e.Graphics.FillRectangle($brush, $checkboxRect)
+            $e.Graphics.DrawRectangle($pen, $checkboxRect)
+            
+            # Draw check mark if checked
+            if ($isChecked) {
+                $checkPen = New-Object System.Drawing.Pen([System.Drawing.Color]::White, 2)
+                $checkPen.StartCap = [System.Drawing.Drawing2D.LineCap]::Round
+                $checkPen.EndCap = [System.Drawing.Drawing2D.LineCap]::Round
+                
+                # Draw checkmark
+                $e.Graphics.DrawLine($checkPen, 
+                    $x + 3, $y + 8, 
+                    $x + 6, $y + 11)
+                $e.Graphics.DrawLine($checkPen, 
+                    $x + 6, $y + 11, 
+                    $x + 13, $y + 4)
+            }
+            
+            # Cleanup
+            $pen.Dispose()
+            $brush.Dispose()
+            if ($isChecked) { $checkPen.Dispose() }
+            
+            $e.Handled = $true
+        }
+    })
+
+    # Select All button event
+    $selectAllButton.Add_Click({
+        $dataGridView.SuspendLayout()
+        
+        # Check all visible items
+        for ($i = 0; $i -lt $dataGridView.Rows.Count; $i++) {
+            $dataGridView.Rows[$i].Cells[0].Value = $true
+            $itemId = $dataGridView.Rows[$i].Cells[6].Value
+            $folderKey = "$script:currentDriveId|$itemId"
+            $script:checkedFolders[$folderKey] = $true
+        }
+        
+        $dataGridView.ResumeLayout()
+        Update-SelectionCount
+    })
+
+    # Deselect All button event
+    $deselectAllButton.Add_Click({
+        $dataGridView.SuspendLayout()
+        
+        # Uncheck all visible items
+        for ($i = 0; $i -lt $dataGridView.Rows.Count; $i++) {
+            $dataGridView.Rows[$i].Cells[0].Value = $false
+            $itemId = $dataGridView.Rows[$i].Cells[6].Value
+            $folderKey = "$script:currentDriveId|$itemId"
+            $script:checkedFolders[$folderKey] = $false
+        }
+        
+        $dataGridView.ResumeLayout()
+        Update-SelectionCount
+    })
+
+    # Set the first drive as selected if available
+    if ($DriveList.Count -gt 0) {
+        # We'll set the selection after the form is loaded to avoid errors
+        $form.add_Shown({
+            if ($driveDropdown.Items.Count -gt 0) {
+                $driveDropdown.SelectedIndex = 0
+            }
+        })
+    }
+
+    # Initialize the form and show
+    $result = $form.ShowDialog()
+    
+    # Process results
+    $selectedFolders = @()
+    if ($result -eq [System.Windows.Forms.DialogResult]::OK) {
+        foreach ($key in $script:checkedFolders.Keys) {
+            if ($script:checkedFolders[$key]) {
+                $parts = $key -split '\|'
+                $driveId = $parts[0]
+                $folderId = $parts[1]
+                
+                # Get drive info
+                $drive = $DriveList | Where-Object { $_.id -eq $driveId } | Select-Object -First 1
+                
+                # Get folder info - we need to make an API call for each selected folder
+                $folderUrl = "$graphEndpoint/drives/$driveId/items/$folderId"
+                $folderResponse = Get-GraphRequest -Uri $folderUrl -AccessToken $AccessToken
+                $folder = $folderResponse | ConvertFrom-Json
+                
+                # Add to result
+                $selectedFolders += [PSCustomObject]@{
+                    DriveId = $driveId
+                    DriveName = if ($drive.name) { $drive.name } else { "Documents" }
+                    SiteDisplayName = if ($drive.siteDisplayName) { $drive.siteDisplayName } else { "SharePoint" }
+                    FolderId = $folderId
+                    FolderName = $folder.name
+                    WebUrl = $folder.webUrl
+                    Path = $folder.parentReference.path
+                }
+            }
+        }
+    }
+    
+    return $selectedFolders
+}
