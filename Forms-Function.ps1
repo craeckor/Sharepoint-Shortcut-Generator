@@ -1850,9 +1850,10 @@ function Show-FolderSelectionForm {
     })
 
     # Event handler for double-click on a row to navigate into folder
-    $dataGridView.add_CellContentDoubleClick({
+    $dataGridView.add_CellDoubleClick({
         param($sender, $e)
-        if ($e.RowIndex -ge 0 -and ($e.ColumnIndex -eq 1 -or $e.ColumnIndex -eq 2)) {
+        # Allow double-clicking on any cell except the checkbox column (column 0)
+        if ($e.RowIndex -ge 0 -and $e.ColumnIndex -ne 0) {
             $itemId = $dataGridView.Rows[$e.RowIndex].Cells[6].Value
             Sync-FolderItems -DriveId $script:currentDriveId -ItemId $itemId -IsRoot $false
         }
