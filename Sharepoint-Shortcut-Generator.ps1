@@ -254,15 +254,95 @@ $requests.counter = 0
 
 Invoke-Expression -Command "$workpath\Import-Assemblies.ps1"
 Import-Module -Name "$workpath\PSAuthClient\PSAuthClient.psd1" -Force
-Import-Module -Name "$workpath\Forms-Function.ps1" -Force
+Import-Module -Name "$workpath\Functions\Forms-Functions.ps1" -Force
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
 Clear-WebView2Cache -Confirm:$false
 
-$authorization_endpoint = "https://login.microsoftonline.com/$tenantId/oauth2/v2.0/authorize"
-$token_endpoint = "https://login.microsoftonline.com/$tenantId/oauth2/v2.0/token"
 $graphEndpoint = "https://graph.microsoft.com/v1.0"
+
+function Get-OAuth2Token {
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory=$true)]
+        [string]$TenantId,
+        
+        [Parameter(Mandatory=$true)]
+        [string]$ClientId,
+        
+        [Parameter(Mandatory=$false)]
+        [string]$RedirectUri = "https://login.microsoftonline.com/common/oauth2/nativeclient",
+        
+        [Parameter(Mandatory=$false)]
+        [string]$Scope = "files.readwrite.all user.read.all allsites.fullcontrol allsites.manage myfiles.read myfiles.write user.readwrite.all",
+        
+        [Parameter(Mandatory=$false)]
+        [switch]$UsePkce,
+        
+        [Parameter(Mandatory=$false)]
+        [hashtable]$CustomParameters = @{}
+    )
+    
+    Write-Verbose "Initiating OAuth2 authentication flow"
+    
+    $authorization_endpoint = "https://login.microsoftonline.com/$TenantId/oauth2/v2.0/authorize"
+    $token_endpoint = "https://login.microsoftonline.com/$TenantId/oauth2/v2.0/token"
+    
+    $authParams = @{
+        client_id = $ClientId
+        scope = $Scope
+        redirect_uri = $RedirectUri
+        customParameters = $CustomParameters
+    }
+    
+    try {
+        Write-Verbose "Requesting authorization code"
+        $code = Invoke-OAuth2AuthorizationEndpoint -uri $authorization_endpoint @authParams -usePkce:$UsePkce
+        
+        if (-not $code) {
+            throw "Failed to obtain authorization code - no code was returned"
+        }
+        
+        Write-Verbose "Authorization code obtained, exchanging for access token"
+        $token = Invoke-OAuth2TokenEndpoint -uri $token_endpoint @code
+        
+        if (-not $token -or -not $token.access_token) {
+            throw "Failed to obtain access token"
+        }
+        
+        Write-Verbose "Access token successfully obtained"
+        
+        # Return a custom object with token information and expiration details
+        $tokenExpiresAt = (Get-Date).AddSeconds($token.expires_in)
+        
+        return [PSCustomObject]@{
+            AccessToken = $token.access_token
+            TokenType = $token.token_type
+            ExpiresIn = $token.expires_in
+            ExpiresAt = $tokenExpiresAt
+            RefreshToken = $token.refresh_token
+            Scope = $token.scope
+            IdToken = $token.id_token
+        }
+    }
+    catch {
+        Write-Error "OAuth2 authentication failed: $($_.Exception.Message)"
+        Write-Verbose "Full error details: $($_)"
+        
+        if ($_.Exception.Message -match "AADSTS65001") {
+            Write-Warning "Consent required - ensure all required permissions have admin consent in Azure AD"
+        }
+        elseif ($_.Exception.Message -match "AADSTS700016") {
+            Write-Warning "Application not found in directory - verify the Client ID is correct"
+        }
+        elseif ($_.Exception.Message -match "AADSTS90002") {
+            Write-Warning "Tenant not found - verify the Tenant ID is correct"
+        }
+        
+        throw $_
+    }
+}
 
 function Get-GraphRequest {
     param (
@@ -271,96 +351,114 @@ function Get-GraphRequest {
         [Parameter(Mandatory=$true)]
         [string]$AccessToken
     )
-    try {
-        # Increment request counter before making the request
-        $script:requests.counter++
-        $currentRequestId = $script:requests.counter
-        
-        Write-Verbose "Making request #$currentRequestId to: $Uri"
-        $rawResponse = Invoke-Expression -Command "$curlpath --connect-timeout 45 --retry 5 --retry-max-time 120 --retry-connrefused -o - -S -s -w '%{http_code}' -X GET -H `"Authorization: Bearer $AccessToken`" -H `"Content-Type: application/json`" -H `"Accept: application/json`" `"$Uri`""
-        
-        if ($LASTEXITCODE -ne 0) {
-            # Store failed request information
-            $script:requests.failed[$currentRequestId] = @{
-                Uri = $Uri
-                Timestamp = Get-Date
-                Error = "Curl command failed with exit code $LASTEXITCODE"
-                HttpCode = $null
-                Response = $null
-            }
-            throw "Curl command failed with exit code $LASTEXITCODE"
-        }
-        
-        # Extract the HTTP status code (last 3 characters)
-        $httpCode = $rawResponse.Substring($rawResponse.Length - 3)
-        
-        # Extract the actual response body (everything except the last 3 characters)
-        $responseBody = $rawResponse.Substring(0, $rawResponse.Length - 3)
-        
-        # Check if HTTP status code indicates an error
-        if (-not ($httpCode -match "^(2\d\d)$")) {
-            # Store failed request information
-            $script:requests.failed[$currentRequestId] = @{
-                Uri = $Uri
-                Timestamp = Get-Date
-                Error = "HTTP request failed with status code: $httpCode"
-                HttpCode = $httpCode
-                Response = $responseBody
+    
+    $maxRetries = 5
+    $retryCount = 0
+    $success = $false
+    
+    # Increment request counter before making the request
+    $script:requests.counter++
+    $currentRequestId = $script:requests.counter
+    
+    do {
+        try {
+            if ($retryCount -gt 0) {
+                Write-Verbose "Retry attempt $retryCount of $maxRetries for request #$currentRequestId to: $Uri"
+                # Add exponential backoff with jitter
+                $backoffSeconds = [math]::Pow(2, $retryCount) + (Get-Random -Minimum 0 -Maximum 1000) / 1000
+                Write-Verbose "Waiting $backoffSeconds seconds before retry..."
+                Start-Sleep -Seconds $backoffSeconds
+            } else {
+                Write-Verbose "Making request #$currentRequestId to: $Uri"
             }
             
-            Write-Verbose "HTTP request #$currentRequestId failed with status code: $httpCode"
-            Write-Verbose "Response body: $responseBody"
-            throw "HTTP request failed with status code: $httpCode"
-        }
-        
-        # Store successful request information
-        $script:requests.succeeded[$currentRequestId] = @{
-            Uri = $Uri
-            Timestamp = Get-Date
-            HttpCode = $httpCode
-            Response = $responseBody
-        }
-        
-        Write-Verbose "Request #$currentRequestId completed successfully with status code: $httpCode"
-        
-        # Return just the response body
-        return $responseBody
-    }
-    catch {
-        Write-Error "Error in GraphAPI request: $($_.Exception.Message)"
-        if (-not $script:requests.failed.ContainsKey($currentRequestId)) {
-            # Store any other error not caught above
-            $script:requests.failed[$currentRequestId] = @{
+            $rawResponse = Invoke-Expression -Command "$curlpath --connect-timeout 45 --retry 5 --retry-max-time 120 --retry-connrefused -o - -S -s -w '%{http_code}' -X GET -H `"Authorization: Bearer $AccessToken`" -H `"Content-Type: application/json`" -H `"Accept: application/json`" `"$Uri`""
+            
+            if ($LASTEXITCODE -ne 0) {
+                Write-Verbose "Curl command failed with exit code $LASTEXITCODE"
+                throw "Curl command failed with exit code $LASTEXITCODE"
+            }
+            
+            # Extract the HTTP status code (last 3 characters)
+            $httpCode = $rawResponse.Substring($rawResponse.Length - 3)
+            
+            # Extract the actual response body (everything except the last 3 characters)
+            $responseBody = $rawResponse.Substring(0, $rawResponse.Length - 3)
+            
+            # Check if HTTP status code is 403 - no retry for this specific status
+            if ($httpCode -eq "403") {
+                # Store failed request information
+                $script:requests.failed[$currentRequestId] = @{
+                    Uri = $Uri
+                    Timestamp = Get-Date
+                    Error = "HTTP request failed with status code: 403 (Forbidden)"
+                    HttpCode = $httpCode
+                    Response = $responseBody
+                }
+                
+                Write-Verbose "HTTP request #$currentRequestId failed with status code: 403 (Forbidden) - Not retrying"
+                throw "HTTP request failed with status code: 403 (Forbidden)"
+            }
+            
+            # Check if HTTP status code indicates other errors that we should retry
+            if (-not ($httpCode -match "^(2\d\d)$")) {
+                Write-Verbose "HTTP request #$currentRequestId failed with status code: $httpCode - Will retry"
+                throw "HTTP request failed with status code: $httpCode"
+            }
+            
+            # If we got here, the request was successful
+            $success = $true
+            
+            # Store successful request information
+            $script:requests.succeeded[$currentRequestId] = @{
                 Uri = $Uri
                 Timestamp = Get-Date
-                Error = $_.Exception.Message
-                HttpCode = $null
-                Response = $null
+                HttpCode = $httpCode
+                Response = $responseBody
+                RetryCount = $retryCount
             }
+            
+            Write-Verbose "Request #$currentRequestId completed successfully with status code: $httpCode after $retryCount retries"
+            
+            # Return just the response body
+            return $responseBody
         }
-        return $($_.Exception.Message)
-    }
-}
-
-$splat = @{
-    client_id = "$clientId"
-    scope = "files.readwrite.all user.read.all allsites.fullcontrol allsites.manage myfiles.read myfiles.write user.readwrite.all"
-    redirect_uri = "https://login.microsoftonline.com/common/oauth2/nativeclient"
-    customParameters = @{}
+        catch {
+            $retryCount++
+            
+            # Check if we've reached max retries or if it's a 403 error (which we don't retry)
+            if ($retryCount -gt $maxRetries -or $_.Exception.Message -match "403 \(Forbidden\)") {
+                # Store failed request information if it's the final attempt
+                if (-not $script:requests.failed.ContainsKey($currentRequestId)) {
+                    $script:requests.failed[$currentRequestId] = @{
+                        Uri = $Uri
+                        Timestamp = Get-Date
+                        Error = $_.Exception.Message
+                        HttpCode = if ($httpCode) { $httpCode } else { $null }
+                        Response = if ($responseBody) { $responseBody } else { $null }
+                        RetryCount = $retryCount - 1
+                    }
+                }
+                
+                Write-Error "Error in GraphAPI request after $($retryCount-1) retries: $($_.Exception.Message)"
+                return $_.Exception.Message
+            }
+            
+            Write-Verbose "Request failed. Error: $($_.Exception.Message). Retrying..."
+        }
+    } while (-not $success -and $retryCount -le $maxRetries)
 }
 
 try {
-    $code = Invoke-OAuth2AuthorizationEndpoint -uri $authorization_endpoint @splat -usePkce:$false
-    $token = Invoke-OAuth2TokenEndpoint -uri $token_endpoint @code
+    $tokenInfo = Get-OAuth2Token -TenantId $tenantId -ClientId $clientId -Verbose
+    $accessToken = $tokenInfo.AccessToken
+    
+    Write-Verbose "Token will expire at: $($tokenInfo.ExpiresAt)"
 } catch {
-    Write-Host "Error: $($_.Exception.Message)"
+    Write-Host "Error: $($_.Exception.Message)" -ForegroundColor Red
     pause
     exit 1
 }
-
-$accessToken = "$($token.access_token)"
-
-Write-Verbose "Access-Token (Bearer-Token): $($token.access_token)"
 
 # Get all users in the tenant
 $allUsers = Get-GraphRequest -Uri "$graphEndpoint/users" -AccessToken "$accessToken"
