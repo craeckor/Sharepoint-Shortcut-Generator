@@ -355,6 +355,7 @@ function Get-GraphRequest {
     $maxRetries = 5
     $retryCount = 0
     $success = $false
+    $tokenRefreshed = $false
     
     # Increment request counter before making the request
     $script:requests.counter++
@@ -385,19 +386,49 @@ function Get-GraphRequest {
             # Extract the actual response body (everything except the last 3 characters)
             $responseBody = $rawResponse.Substring(0, $rawResponse.Length - 3)
             
-            # Check if HTTP status code is 403 - no retry for this specific status
-            if ($httpCode -eq "403") {
+            # Check if HTTP status code is 403 - try refreshing token once
+            if ($httpCode -eq "403" -and -not $tokenRefreshed) {
+                Write-Verbose "HTTP request #$currentRequestId failed with status code: 403 (Forbidden) - Attempting to refresh token"
+                
+                try {
+                    # Request a new token
+                    $newTokenInfo = Get-OAuth2Token -TenantId $tenantId -ClientId $clientId
+                    $AccessToken = $newTokenInfo.AccessToken
+                    $tokenRefreshed = $true
+                    Write-Verbose "Token refreshed successfully, will retry request with new token"
+                    
+                    # Reset retry count to give full retry attempts with new token
+                    $retryCount = 0
+                    continue
+                }
+                catch {
+                    Write-Verbose "Failed to refresh token: $($_.Exception.Message)"
+                    
+                    # Store failed request information
+                    $script:requests.failed[$currentRequestId] = @{
+                        Uri = $Uri
+                        Timestamp = Get-Date
+                        Error = "HTTP request failed with status code: 403 (Forbidden) - Token refresh failed: $($_.Exception.Message)"
+                        HttpCode = $httpCode
+                        Response = $responseBody
+                    }
+                    
+                    throw "Access denied (403 Forbidden). This may indicate missing permissions or admin consent. Please ensure your application has the required permissions: files.readwrite.all, user.read.all, allsites.fullcontrol, allsites.manage, myfiles.read, myfiles.write, user.readwrite.all."
+                }
+            }
+            # Handle 403 error after token refresh attempt
+            elseif ($httpCode -eq "403" -and $tokenRefreshed) {
                 # Store failed request information
                 $script:requests.failed[$currentRequestId] = @{
                     Uri = $Uri
                     Timestamp = Get-Date
-                    Error = "HTTP request failed with status code: 403 (Forbidden)"
+                    Error = "HTTP request failed with status code: 403 (Forbidden) - Even after token refresh"
                     HttpCode = $httpCode
                     Response = $responseBody
                 }
                 
-                Write-Verbose "HTTP request #$currentRequestId failed with status code: 403 (Forbidden) - Not retrying"
-                throw "HTTP request failed with status code: 403 (Forbidden)"
+                Write-Verbose "HTTP request #$currentRequestId failed with status code: 403 (Forbidden) - Even after token refresh"
+                throw "Access denied (403 Forbidden) even after token refresh. This indicates insufficient permissions for this operation. Please verify that all required permissions have been granted and admin consent has been provided in Azure AD."
             }
             
             # Check if HTTP status code indicates other errors that we should retry
@@ -416,6 +447,7 @@ function Get-GraphRequest {
                 HttpCode = $httpCode
                 Response = $responseBody
                 RetryCount = $retryCount
+                TokenRefreshed = $tokenRefreshed
             }
             
             Write-Verbose "Request #$currentRequestId completed successfully with status code: $httpCode after $retryCount retries"
@@ -426,8 +458,8 @@ function Get-GraphRequest {
         catch {
             $retryCount++
             
-            # Check if we've reached max retries or if it's a 403 error (which we don't retry)
-            if ($retryCount -gt $maxRetries -or $_.Exception.Message -match "403 \(Forbidden\)") {
+            # Check if we've reached max retries or if it's a terminal 403 error (after token refresh)
+            if ($retryCount -gt $maxRetries -or ($_.Exception.Message -match "403 \(Forbidden\)" -and $tokenRefreshed)) {
                 # Store failed request information if it's the final attempt
                 if (-not $script:requests.failed.ContainsKey($currentRequestId)) {
                     $script:requests.failed[$currentRequestId] = @{
@@ -437,6 +469,7 @@ function Get-GraphRequest {
                         HttpCode = if ($httpCode) { $httpCode } else { $null }
                         Response = if ($responseBody) { $responseBody } else { $null }
                         RetryCount = $retryCount - 1
+                        TokenRefreshed = $tokenRefreshed
                     }
                 }
                 
