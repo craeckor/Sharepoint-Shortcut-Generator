@@ -519,29 +519,59 @@ if (-not $selectedFolders -or $selectedFolders.Count -eq 0) {
 
 # Print selected folders
 Write-Host "Selected Folders:" -ForegroundColor Cyan
-$foldersTable = $selectedFolders | Format-Table -Property DriveName, SiteDisplayName, FolderName, WebUrl -AutoSize | Out-String
+$foldersTable = $selectedFolders | Format-Table -Property * -AutoSize | Out-String
 Write-Host $foldersTable
 
 # Associate selected folders with users
 foreach ($user in $users.list) {
     $user | Add-Member -NotePropertyName "folders" -NotePropertyValue @() -Force
+
+    # Print user information
+    $userInfo = $user.sites | Format-Table -Property * -AutoSize | Out-String
+    Write-Verbose "User: $($user.DisplayName) - Sites:`n$userInfo"
     
     # For each site the user has access to
     foreach ($siteId in $user.sites.Keys) {
         # Get the driveId for this site from the user's sites collection
         $siteDriveId = $user.sites[$siteId].driveId
+
+        Write-Verbose "Processing site: $($user.sites[$siteId].siteName)"
+        Write-Verbose "Site DriveId: $siteDriveId"
         
-        # Get relevant folders for this site by matching the driveId
-        $siteFolders = $selectedFolders | Where-Object { 
-            $_.DriveId -eq $siteDriveId
+        # Find matching folders for this site's drive ID
+        $matchedFolders = @()
+        foreach ($folder in $selectedFolders) {
+            $folderDriveId = $folder.DriveId.ToString().Trim()
+            $userSiteDriveId = $siteDriveId.ToString().Trim()
+            
+            Write-Verbose "Comparing folder '$($folder.FolderName)': '$folderDriveId' with site drive: '$userSiteDriveId'"
+            
+            # If the drive IDs match, add this folder to the matched set
+            if ($folderDriveId -ieq $userSiteDriveId) {
+                Write-Verbose "MATCH FOUND - Adding folder: $($folder.FolderName)"
+                $matchedFolders += $folder
+            }
         }
         
-        if ($siteFolders -and $siteFolders.Count -gt 0) {
-            $user.folders += $siteFolders
-            Write-Verbose "Added $(($siteFolders | Measure-Object).Count) folders from site $($user.sites[$siteId].siteName) to user $($user.DisplayName)"
+        # Now add all matched folders to the user's folders collection
+        if ($matchedFolders.Count -gt 0) {
+            $user.folders += $matchedFolders
+            Write-Verbose "Added $($matchedFolders.Count) folders from site $($user.sites[$siteId].siteName) to user $($user.DisplayName)"
+            
+            foreach ($folder in $matchedFolders) {
+                Write-Verbose "  - Added folder: $($folder.FolderName)"
+            }
         } else {
             Write-Verbose "No matching folders found for user $($user.DisplayName) in site $($user.sites[$siteId].siteName)"
         }
+    }
+    
+    # Show summary for this user
+    Write-Verbose "Total folders for $($user.DisplayName): $(($user.folders | Measure-Object).Count)"
+
+    # Show all folders for each user
+    foreach ($folder in $user.folders) {
+        Write-Verbose "  - Folder: $($folder.FolderName) (DriveId: $($folder.DriveId))"
     }
 }
 

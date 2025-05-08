@@ -908,7 +908,7 @@ function Show-FolderSelectionForm {
         [Parameter(Mandatory=$true)]
         [array]$DriveList,
         
-        [Parameter(Mandatory=$false)]
+        [Parameter(Mandatory=$true)]
         [string]$AccessToken
     )
 
@@ -1377,7 +1377,7 @@ function Show-FolderSelectionForm {
     }
 
     # Function to load folder items
-    function Load-FolderItems {
+    function Sync-FolderItems {
         param(
             [string]$DriveId,
             [string]$ItemId,
@@ -1593,7 +1593,7 @@ function Show-FolderSelectionForm {
     }
 
     # Function to navigate back
-    function Navigate-Back {
+    function Switch-NavigateBack {
         if ($script:navigationHistory[$script:currentDriveId].Count -le 1) {
             return
         }
@@ -1608,7 +1608,7 @@ function Show-FolderSelectionForm {
         # Load previous folder
         if ($previous.id -eq $script:navigationHistory[$script:currentDriveId][0].id) {
             # We're going back to root
-            Load-FolderItems -DriveId $script:currentDriveId -IsRoot $true
+            Sync-FolderItems -DriveId $script:currentDriveId -IsRoot $true
         } else {
             # Going back to a subfolder
             $script:currentPath[$script:currentDriveId] = @{
@@ -1617,7 +1617,7 @@ function Show-FolderSelectionForm {
                 "name" = $previous.name
             }
             $pathLabel.Text = $previous.path
-            Load-FolderItems -DriveId $script:currentDriveId -ItemId $previous.id -IsRoot $false
+            Sync-FolderItems -DriveId $script:currentDriveId -ItemId $previous.id -IsRoot $false
         }
         
         # Update back button state after navigation
@@ -1712,13 +1712,13 @@ function Show-FolderSelectionForm {
             $script:selectedDrive = $DriveList[$driveIndex].id
             
             # Load root of selected drive
-            Load-FolderItems -DriveId $script:selectedDrive -IsRoot $true
+            Sync-FolderItems -DriveId $script:selectedDrive -IsRoot $true
         }
     })
 
     # Event handler for back button
     $backButton.add_Click({
-        Navigate-Back
+        Switch-NavigateBack
     })
 
     # Event handler for refresh button
@@ -1822,7 +1822,7 @@ function Show-FolderSelectionForm {
                 Hide-Loading
             }
         } elseif ($null -ne $script:selectedDrive) {
-            Load-FolderItems -DriveId $script:selectedDrive -IsRoot $true
+            Sync-FolderItems -DriveId $script:selectedDrive -IsRoot $true
         }
     })
 
@@ -1854,7 +1854,7 @@ function Show-FolderSelectionForm {
         param($sender, $e)
         if ($e.RowIndex -ge 0 -and ($e.ColumnIndex -eq 1 -or $e.ColumnIndex -eq 2)) {
             $itemId = $dataGridView.Rows[$e.RowIndex].Cells[6].Value
-            Load-FolderItems -DriveId $script:currentDriveId -ItemId $itemId -IsRoot $false
+            Sync-FolderItems -DriveId $script:currentDriveId -ItemId $itemId -IsRoot $false
         }
     })
 
