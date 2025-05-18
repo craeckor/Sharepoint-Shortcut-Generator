@@ -33,6 +33,12 @@ Param(
     [string]$clientId
 )
 
+$SetVerbose = $false
+if ($PSCmdlet.MyInvocation.BoundParameters["Verbose"]) {
+    $SetVerbose = $true
+    Write-Verbose "Verbose mode enabled"
+}
+
 function Restart-AsAdmin  {
     if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
         $argList = @(
@@ -41,8 +47,7 @@ function Restart-AsAdmin  {
             "-tenantId", "`"$tenantId`"",
             "-clientId", "`"$clientId`""
         )
-        
-        # Pass the Verbose parameter if it was provided
+
         if ($PSCmdlet.MyInvocation.BoundParameters["Verbose"]) {
             $argList += "-Verbose"
         }
@@ -59,8 +64,7 @@ function Restart-Yourself  {
         "-tenantId", "`"$tenantId`"",
         "-clientId", "`"$clientId`""
     )
-    
-    # Pass the Verbose parameter if it was provided
+
     if ($PSCmdlet.MyInvocation.BoundParameters["Verbose"]) {
         $argList += "-Verbose"
     }
@@ -312,6 +316,7 @@ function Get-OAuth2Token {
         }
         
         Write-Verbose "Access token successfully obtained"
+        Write-Verbose "Access token: $($token.access_token)"
         
         # Return a custom object with token information and expiration details
         $tokenExpiresAt = (Get-Date).AddSeconds($token.expires_in)
@@ -344,12 +349,20 @@ function Get-OAuth2Token {
     }
 }
 
-function Get-GraphRequest {
+function Send-GraphRequest {
+    [CmdletBinding()]
     param (
         [Parameter(Mandatory=$true)]
         [string]$Uri,
         [Parameter(Mandatory=$true)]
-        [string]$AccessToken
+        [ValidateSet("GET", "POST", "PATCH")]
+        [string]$Method,
+        [Parameter(Mandatory=$false)]
+        [string]$AccessToken,
+        [Parameter(Mandatory=$false)]
+        [string]$Body,
+        [Parameter(Mandatory=$false)]
+        [string]$Cookie
     )
     
     $maxRetries = 5
@@ -372,8 +385,32 @@ function Get-GraphRequest {
             } else {
                 Write-Verbose "Making request #$currentRequestId to: $Uri"
             }
+
+            # Build basic curl cmd
+            $curlCmd = "$curlpath --connect-timeout 45 --retry 5 --retry-max-time 120 --retry-connrefused -o - -S -s -w '%{http_code}' -X $Method"
+
+            # Add Authorization header if AccessToken is provided
+            if ($AccessToken) {
+                $curlCmd += " -H `"Authorization: Bearer $AccessToken`""
+            }
+
+            # Add Body if provided
+            if ($Body) {
+                $curlCmd += " -d `"$Body`""
+            }
+
+            # Add Cookie if provided
+            if ($Cookie) {
+                $curlCmd += " -b `"$Cookie`""
+            }
+
+            # Add standard headers
+            $curlCmd += " -H `"Content-Type: application/json`" -H `"Accept: application/json`""
+
+            # Add the URI
+            $curlCmd += " `"$Uri`""
             
-            $rawResponse = Invoke-Expression -Command "$curlpath --connect-timeout 45 --retry 5 --retry-max-time 120 --retry-connrefused -o - -S -s -w '%{http_code}' -X GET -H `"Authorization: Bearer $AccessToken`" -H `"Content-Type: application/json`" -H `"Accept: application/json`" `"$Uri`""
+            $rawResponse = Invoke-Expression -Command "$curlCmd"
             
             if ($LASTEXITCODE -ne 0) {
                 Write-Verbose "Curl command failed with exit code $LASTEXITCODE"
@@ -387,12 +424,12 @@ function Get-GraphRequest {
             $responseBody = $rawResponse.Substring(0, $rawResponse.Length - 3)
             
             # Check if HTTP status code is 403 - try refreshing token once
-            if ($httpCode -eq "403" -and -not $tokenRefreshed) {
+            if ($httpCode -eq "403" -and -not $tokenRefreshed -and -not $Cookie) {
                 Write-Verbose "HTTP request #$currentRequestId failed with status code: 403 (Forbidden) - Attempting to refresh token"
                 
                 try {
                     # Request a new token
-                    $newTokenInfo = Get-OAuth2Token -TenantId $tenantId -ClientId $clientId
+                    $newTokenInfo = Get-OAuth2Token -TenantId $tenantId -ClientId $clientId -Verbose:$SetVerbose
                     $AccessToken = $newTokenInfo.AccessToken
                     $tokenRefreshed = $true
                     Write-Verbose "Token refreshed successfully, will retry request with new token"
@@ -417,7 +454,7 @@ function Get-GraphRequest {
                 }
             }
             # Handle 403 error after token refresh attempt
-            elseif ($httpCode -eq "403" -and $tokenRefreshed) {
+            elseif ($httpCode -eq "403" -and $tokenRefreshed -and -not $Cookie) {
                 # Store failed request information
                 $script:requests.failed[$currentRequestId] = @{
                     Uri = $Uri
@@ -430,9 +467,27 @@ function Get-GraphRequest {
                 Write-Verbose "HTTP request #$currentRequestId failed with status code: 403 (Forbidden) - Even after token refresh"
                 throw "Access denied (403 Forbidden) even after token refresh. This indicates insufficient permissions for this operation. Please verify that all required permissions have been granted and admin consent has been provided in Azure AD."
             }
-            
+            # Special handling for 409 (Conflict) errors - track as error but return the response
+            elseif ($httpCode -eq "409") {
+                Write-Verbose "HTTP request #$currentRequestId returned status code: 409 (Conflict) - Will track as error but return the response"
+                
+                # Store in failed requests but don't throw an error
+                $script:requests.failed[$currentRequestId] = @{
+                    Uri = $Uri
+                    Timestamp = Get-Date
+                    Error = "HTTP request returned status code: 409 (Conflict)"
+                    HttpCode = $httpCode
+                    Response = $responseBody
+                }
+                
+                # Set success to true so we exit the retry loop
+                $success = $true
+                
+                # Return the response body despite the error
+                return $responseBody
+            }
             # Check if HTTP status code indicates other errors that we should retry
-            if (-not ($httpCode -match "^(2\d\d)$")) {
+            elseif (-not ($httpCode -match "^(2\d\d)$")) {
                 Write-Verbose "HTTP request #$currentRequestId failed with status code: $httpCode - Will retry"
                 throw "HTTP request failed with status code: $httpCode"
             }
@@ -474,7 +529,10 @@ function Get-GraphRequest {
                 }
                 
                 Write-Error "Error in GraphAPI request after $($retryCount-1) retries: $($_.Exception.Message)"
-                return $_.Exception.Message
+                
+                # Instead of returning the error message as if it were a valid response,
+                # throw the error so the caller can handle it properly
+                throw "Request failed after $maxRetries retries: $($_.Exception.Message)"
             }
             
             Write-Verbose "Request failed. Error: $($_.Exception.Message). Retrying..."
@@ -483,7 +541,8 @@ function Get-GraphRequest {
 }
 
 try {
-    $tokenInfo = Get-OAuth2Token -TenantId $tenantId -ClientId $clientId -Verbose
+    Write-Host "Starting OAuth2 authentication process..."
+    $tokenInfo = Get-OAuth2Token -TenantId $tenantId -ClientId $clientId -Verbose:$SetVerbose
     $accessToken = $tokenInfo.AccessToken
     
     Write-Verbose "Token will expire at: $($tokenInfo.ExpiresAt)"
@@ -493,8 +552,20 @@ try {
     exit 1
 }
 
-# Get all users in the tenant
-$allUsers = Get-GraphRequest -Uri "$graphEndpoint/users" -AccessToken "$accessToken"
+Write-Host "Getting all users in tenant..."
+try {
+    # Get all users in the tenant
+    $allUsers = Send-GraphRequest -Method GET -Uri "$graphEndpoint/users" -AccessToken "$accessToken" -Verbose:$SetVerbose
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "Error: Unable to get users from Graph API."
+        pause
+        exit 1
+    }
+} catch {
+    Write-Host "Error: $($_.Exception.Message)" -ForegroundColor Red
+    pause
+    exit 1
+}
 
 # Parse the JSON response
 $allUsersObj = $allUsers | ConvertFrom-Json
@@ -503,8 +574,11 @@ $allUsersObj = $allUsers | ConvertFrom-Json
 $usersAllTable = ($allUsersObj.value | Select-Object DisplayName, mail, id | Format-Table -AutoSize | Out-String).Trim()
 Write-Verbose "All users in tenant:`n$usersAllTable"
 
+Write-Host "Showing user selection form..."
+Write-Host "Please select the users you want to work with..."
+
 # Only call ONCE and assign result
-$selectedUsers = Show-UserSelectionForm -userList $allUsersObj.value
+$selectedUsers = Show-UserSelectionForm -userList $allUsersObj.value -Verbose:$SetVerbose
 
 if (-not $selectedUsers -or $selectedUsers.Count -eq 0) {
     Write-Host "No users selected. Exiting..."
@@ -521,14 +595,39 @@ Write-Verbose "Selected users count: $($users.list.Count)"
 $usersTable = ($users.list | Format-Table -AutoSize | Out-String).Trim()
 Write-Verbose "Selected users:`n$usersTable"
 
-$allSites = Get-GraphRequest -Uri "$graphEndpoint/sites?search=*" -AccessToken "$accessToken"
+Write-Host "Getting all sites in tenant..."
+
+try {
+    $allSites = Send-GraphRequest -Method GET -Uri "$graphEndpoint/sites?search=*" -AccessToken "$accessToken" -Verbose:$SetVerbose
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "Error: Unable to get sites from Graph API."
+        pause
+        exit 1
+    }
+} catch {
+    Write-Host "Error: $($_.Exception.Message)" -ForegroundColor Red
+    pause
+    exit 1
+}
 
 $allSitesObj = $allSites | ConvertFrom-Json
 
-$sitesAllTable = ($allSitesObj.value | Select-Object DisplayName, WebUrl, id | Format-Table -AutoSize | Out-String).Trim()
-Write-Verbose "All users in tenant:`n$sitesAllTable"
+# Parse the structured site IDs into their components
+foreach ($site in $allSitesObj.value) {
+    if ($site.id -match "([^,]+),([^,]+),(.+)") {
+        $site | Add-Member -NotePropertyName "domainId" -NotePropertyValue $Matches[1] -Force
+        $site | Add-Member -NotePropertyName "siteId" -NotePropertyValue $Matches[2] -Force
+        $site | Add-Member -NotePropertyName "webId" -NotePropertyValue $Matches[3] -Force
+    }
+}
 
-$selectedSites = Show-SiteSelectionForm -SiteList $allSitesObj.value
+$sitesAllTable = ($allSitesObj.value | Select-Object DisplayName, WebUrl, domainId, siteId, webId | Format-Table -AutoSize | Out-String).Trim()
+Write-Verbose "All sites in tenant:`n$sitesAllTable"
+
+Write-Host "Showing site selection form..."
+Write-Host "Please select the sites you want to work with..."
+
+$selectedSites = Show-SiteSelectionForm -SiteList $allSitesObj.value -Verbose:$SetVerbose
 
 if (-not $selectedSites -or $selectedSites.Count -eq 0) {
     Write-Host "No sites selected. Exiting..."
@@ -538,14 +637,38 @@ if (-not $selectedSites -or $selectedSites.Count -eq 0) {
 
 $sites.list = $selectedSites
 
+# Make sure selected sites include the ID components
+foreach ($site in $sites.list) {
+    if (-not ($site.PSObject.Properties.Name -contains "domainId") -and 
+        $site.id -match "([^,]+),([^,]+),(.+)") {
+        $site | Add-Member -NotePropertyName "domainId" -NotePropertyValue $Matches[1] -Force
+        $site | Add-Member -NotePropertyName "siteId" -NotePropertyValue $Matches[2] -Force
+        $site | Add-Member -NotePropertyName "webId" -NotePropertyValue $Matches[3] -Force
+    }
+}
+
 # Format as string first, then output with Write-Verbose
 $sitesTable = ($sites.list | Format-Table -Property DisplayName, WebUrl, id -AutoSize | Out-String).Trim()
 Write-Verbose "Selected sites:`n$sitesTable"
 
+Write-Host "Getting drives for selected sites..."
+
 foreach ($site in $sites.list) {
     $site | Add-Member -NotePropertyName "DriveId" -NotePropertyValue $null -Force
 
-    $drive = Get-GraphRequest -Uri "$graphEndpoint/sites/$($site.id)/drives" -AccessToken "$accessToken"
+    try{
+        $drive = Send-GraphRequest -Method GET -Uri "$graphEndpoint/sites/$($site.id)/drives" -AccessToken "$accessToken" -Verbose:$SetVerbose
+        if ($LASTEXITCODE -ne 0) {
+            Write-Error "Error: Unable to get drives from Graph API."
+            Write-Verbose "Error details: $drive"
+            Pause
+            exit 1
+        }
+    } catch {
+        Write-Host "Error: $($_.Exception.Message)" -ForegroundColor Red
+        Pause
+        exit 1
+    }
 
     $driveObj = $drive | ConvertFrom-Json
 
@@ -556,13 +679,26 @@ foreach ($site in $sites.list) {
 $sitesTable = ($sites.list | Format-Table -Property DisplayName, DriveId, WebUrl, id -AutoSize | Out-String).Trim()
 Write-Verbose "Selected sites:`n$sitesTable"
 
+Write-Host "Getting permissions for selected sites..."
+
 foreach ($site in $sites.list) {
     $site | Add-Member -NotePropertyName "Permissions" -NotePropertyValue @{} -Force
 
     Write-Verbose "Getting permissions for site: $($site.displayName)"
     
     # Get User Information List
-    $permissionslist = Get-GraphRequest -Uri "$(([uri]::new("$graphEndpoint/sites/$($site.id)/lists?filter=displayName eq 'User Information List'")).AbsoluteUri)" -AccessToken "$accessToken"
+    try {
+        $permissionslist = Send-GraphRequest -Method GET -Uri "$(([uri]::new("$graphEndpoint/sites/$($site.id)/lists?filter=displayName eq 'User Information List'")).AbsoluteUri)" -AccessToken "$accessToken" -Verbose:$SetVerbose
+        if ($LASTEXITCODE -ne 0) {
+            Write-Error "Error: Unable to get permissions list from Graph API."
+            pause
+            exit 1
+        }
+    } catch {
+        Write-Host "Error: $($_.Exception.Message)" -ForegroundColor Red
+        Pause
+        exit 1
+    }
     $permissionslistObj = $permissionslist | ConvertFrom-Json
     $permissionslistId = $permissionslistObj.value | Where-Object {$_.displayName -eq "User Information List"} | Select-Object -ExpandProperty id
     
@@ -572,7 +708,18 @@ foreach ($site in $sites.list) {
     }
     
     # Get list items with all fields
-    $permissions = Get-GraphRequest -Uri "$graphEndpoint/sites/$($site.id)/lists/$permissionslistId/items?expand=fields" -AccessToken "$accessToken"
+    try {
+        $permissions = Send-GraphRequest -Method GET -Uri "$graphEndpoint/sites/$($site.id)/lists/$permissionslistId/items?expand=fields" -AccessToken "$accessToken" -Verbose:$SetVerbose
+        if ($LASTEXITCODE -ne 0) {
+            Write-Error "Error: Unable to get permissions from Graph API."
+            pause
+            exit 1
+        }
+    } catch {
+        Write-Host "Error: $($_.Exception.Message)" -ForegroundColor Red
+        Pause
+        exit 1
+    }
     $permissionsObj = $permissions | ConvertFrom-Json
     
     # Extract only the fields property from each item
@@ -592,9 +739,11 @@ foreach ($site in $sites.list) {
     Write-Verbose "Total users in permissions list: $($fieldsOnly.Count)"
 }
 
+Write-Host "Associating users with sites..."
+
 foreach ($user in $users.list) {
     $user | Add-Member -NotePropertyName "sites" -NotePropertyValue @{} -Force
-    $userEmail = $user.mail
+    $userEmail = $user.Mail
     Write-Verbose "Looking for sites with access for user: $($user.displayName) ($userEmail)"
 
     foreach ($site in $sites.list) {
@@ -632,14 +781,19 @@ foreach ($site in $sites.list) {
             id = $site.DriveId
             name = "Documents"
             siteDisplayName = $site.DisplayName
-            siteId = $site.id 
+            siteId = $site.id
             webUrl = $site.WebUrl
+            domainId = $site.domainId
+            webId = $site.webId
         }
     }
 }
 
+Write-Host "Getting folders for selected drives..."
+Write-Host "Please select the folders you want to work with..."
+
 # Show the folder selection form
-$selectedFolders = Show-FolderSelectionForm -DriveList $driveList -AccessToken $accessToken
+$selectedFolders = Show-FolderSelectionForm -DriveList $driveList -AccessToken $accessToken -Verbose:$SetVerbose
 
 # Display selected folders
 if (-not $selectedFolders -or $selectedFolders.Count -eq 0) {
@@ -652,6 +806,72 @@ if (-not $selectedFolders -or $selectedFolders.Count -eq 0) {
 Write-Host "Selected Folders:" -ForegroundColor Cyan
 $foldersTable = $selectedFolders | Format-Table -Property * -AutoSize | Out-String
 Write-Host $foldersTable
+
+Write-Host "Processing selected folders..."
+
+foreach ($folder in $selectedFolders) {
+    try {
+        Write-Verbose "Folder WebUrl: $($folder.webUrl)"
+        Write-Verbose "SharePointId: $($folder.siteId)"
+
+        # Get Documents list ID
+        $documentsList = Send-GraphRequest -Method GET -Uri "$(([uri]::new("$graphEndpoint/sites/$($folder.siteId)/lists?filter=displayName eq 'Documents'")).AbsoluteUri)" -AccessToken "$accessToken" -Verbose:$SetVerbose
+        if ($LASTEXITCODE -ne 0) {
+            Write-Error "Error: Unable to get Documents list from Graph API."
+            Write-Verbose "Error details: $documentsList"
+            Pause
+            exit 1
+        }
+        $documentsListObj = $documentsList | ConvertFrom-Json
+        $documentsListId = $documentsListObj.value | Where-Object {$_.name -eq "Shared Documents"} | Select-Object -ExpandProperty id
+
+        # Get eTag and webUrl from Shared Documents list
+        $documentsListItems = Send-GraphRequest -Method GET -Uri "$graphEndpoint/sites/$($folder.siteId)/lists/$documentsListId/items?select=eTag,webUrl" -AccessToken "$accessToken" -Verbose:$SetVerbose
+        if ($LASTEXITCODE -ne 0) {
+            Write-Error "Error: Unable to get Documents list items from Graph API."
+            Write-Verbose "Error details: $documentsListItems"
+            Pause
+            exit 1
+        }
+        $documentsListItemsObj = $documentsListItems | ConvertFrom-Json
+        
+        # Get the eTag for the folder, if empty, use root folder
+        $rawETag = $documentsListItemsObj.value | Where-Object {$_.webUrl -eq $folder.webUrl} | Select-Object -ExpandProperty eTag
+        
+        # Process the eTag to extract just the ID part (removing quotes and ",1" suffix)
+        if ($rawETag) {
+            if ($rawETag -match '"([^"]+),\d+"' -or $rawETag -match '"([^"]+)"') {
+                # Extract the GUID part from the eTag, removing quotes and suffix
+                $cleanETag = $Matches[1]
+                Write-Verbose "Extracted clean eTag: $cleanETag from raw eTag: $rawETag"
+            } else {
+                # Fallback if pattern doesn't match
+                $cleanETag = $rawETag -replace '"', '' -replace ',\d+$', ''
+                Write-Verbose "Cleaned eTag using replace: $cleanETag from raw eTag: $rawETag"
+            }
+        } else {
+            $cleanETag = "root"
+            Write-Verbose "No eTag found, using: $cleanETag"
+        }
+        
+        Write-Verbose "Documents list ID: $documentsListId"
+        Write-Verbose "Documents list raw eTag: $rawETag"
+        Write-Verbose "Documents list clean eTag: $cleanETag"
+
+        # Add the eTag to the folder object
+        $folder | Add-Member -NotePropertyName "eTag" -NotePropertyValue $cleanETag -Force
+        $folder | Add-Member -NotePropertyName "eTagList" -NotePropertyValue $folder.webId -Force
+        $folder.eTag = $cleanETag
+        $folder.eTagList = $documentsListId
+    } catch {
+        Write-Host "Error: $($_.Exception.Message)" -ForegroundColor Red
+        Write-Verbose "Failed to get eTag for folder: $($folder.FolderName)"
+        Pause
+        exit 1
+    }
+}
+
+Write-Host "Associating folders with users..."
 
 # Associate selected folders with users
 foreach ($user in $users.list) {
@@ -702,15 +922,161 @@ foreach ($user in $users.list) {
 
     # Show all folders for each user
     foreach ($folder in $user.folders) {
-        Write-Verbose "  - Folder: $($folder.FolderName) (DriveId: $($folder.DriveId))"
+        Write-Verbose "  - Folder: $($folder.FolderName) (DriveId: $($folder.DriveId), Path: $($folder.Path))"
     }
 }
 
-# Print summary of folder assignments
-Write-Host "`nFolder Assignment Summary:" -ForegroundColor Cyan
+Write-Host "Processing completed. Please review the selected folders and users."
+Write-Host "You can now edit the folder names for shortcut creation."
+
+# Show the folder name edit form
+$editedFolders = Show-FolderNameEditForm -SelectedFolders $selectedFolders -Verbose:$SetVerbose
+
+# Check if user canceled the edit form
+if (-not $editedFolders -or $editedFolders.Count -eq 0) {
+    Write-Host "Folder editing was canceled. Exiting..." -ForegroundColor Yellow
+    pause
+    exit
+}
+
+# Display the edited folders in a table format
+Write-Host "Edited Folders for Shortcut Creation:" -ForegroundColor Cyan
+foreach ($folder in $editedFolders) {
+    Write-Host ""
+    Write-Host "Folder Name: $($folder.FolderName)" -ForegroundColor Green
+    Write-Host "DriveId: $($folder.DriveId)" -ForegroundColor Green
+    Write-Host "Path: $($folder.Path)" -ForegroundColor Green
+    Write-Host "DisplayName: $($folder.DisplayName)" -ForegroundColor Green
+    Write-Host "WebId: $($folder.webId)" -ForegroundColor Green
+    Write-Host "eTag: $($folder.eTag)" -ForegroundColor Green
+    Write-Host "eTagList: $($folder.eTagList)" -ForegroundColor Green
+    Write-Host "WebUrl: $($folder.webUrl)" -ForegroundColor Green
+    Write-Host "SiteId: $($folder.siteId)" -ForegroundColor Green
+    Write-Host "SiteWebUrl: $($folder.siteWebUrl)" -ForegroundColor Green
+    Write-Host ""
+}
+
+# Show count summary
+Write-Host "$($editedFolders.Count) folders will be used for shortcut creation" -ForegroundColor Green
+Write-Host ""
+
+# Show count and each folder name for each user
 foreach ($user in $users.list) {
-    $folderCount = ($user.folders | Measure-Object).Count
-    Write-Host "- $($user.DisplayName): $folderCount folders" -ForegroundColor White
+    Write-Host "User: $($user.DisplayName) ($($user.Mail))" -ForegroundColor Cyan
+    Write-Host "Total folders: $($user.folders.Count)" -ForegroundColor Green
+    Write-Host "Folders:" -ForegroundColor Cyan
+    
+    foreach ($folder in $user.folders) {
+        Write-Host "  - $($folder.FolderName)" -ForegroundColor Green
+    }
+    
+    Write-Host ""
+}
+
+Write-Host "Obtaining WebView2 cookies for Admin Center login..."
+
+# Grab Cookie from Admin Center Login
+try {
+    $acCookie = Invoke-Expression -Command "pwsh.exe -ExecutionPolicy Bypass -File `"$workpath\Get-WebView2Cookies.ps1`""
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "Error: Unable to get WebView2 cookies."
+        pause
+        exit 1
+    }
+    if (-not $acCookie) {
+        Write-Host "Error: No cookies found. Please ensure you are logged into the Admin Center."
+        pause
+        exit 1
+    }
+} catch {
+    Write-Host "Error: $($_.Exception.Message)" -ForegroundColor Red
+    pause
+    exit 1
+}
+
+Write-Verbose "Cookie: $acCookie"
+
+Write-Host "Processing OneDrive access for each user..."
+
+# Request Onedrive-Access for each user
+foreach ($user in $users.list) {
+    Write-Verbose "Processing user: $($user.DisplayName) ($($user.Mail))"
+    
+    $user | Add-Member -NotePropertyName "DriveAccess" -NotePropertyValue $null -Force
+
+    # Try to get permissions for each user's OneDrive
+    try {
+        $userDrive = Send-GraphRequest -Method GET -Uri "https://admin.microsoft.com/admin/api/users/accessodb?upn=$($user.Mail)" -Cookie "$acCookie" -Verbose:$SetVerbose
+        if ($LASTEXITCODE -ne 0) {
+            Write-Error "Error: Unable to get OneDrive access for user $($user.DisplayName)."
+            Write-Verbose "Error details: $userDrive"
+            $user.DriveAccess = $false
+            continue
+        }
+
+        # Remove "" from the response
+        $userDrive = $userDrive -replace '"', ''
+
+        Write-Verbose "User's $($user.DisplayName) OneDrive access: $userDrive"
+
+        # Test access to the user's OneDrive
+        # Get OneDrive's drive ID
+        if ($null -eq $user.DriveAccess) {
+            $userDrive = Send-GraphRequest -Method GET -Uri "$(([uri]::new("$graphEndpoint/users/$($user.id)/drives?filter=name eq 'OneDrive'")).AbsoluteUri)" -AccessToken "$accessToken" -Verbose:$SetVerbose
+            if ($LASTEXITCODE -ne 0) {
+                Write-Error "Error: Unable to get OneDrive for user $($user.DisplayName)."
+                Write-Verbose "Error details: $userDrive"
+                $user.DriveAccess = $false
+                continue
+            } else {
+                $userDriveObj = $userDrive | ConvertFrom-Json
+                $userDriveId = $userDriveObj.value | Where-Object {$_.name -eq "OneDrive"} | Select-Object -ExpandProperty id
+            }
+        }
+        if (-not $userDriveId) {
+            Write-Warning "No 'OneDrive' found for user: $($user.displayName)"
+            $user.DriveAccess = $false
+            continue
+        } else {
+            Write-Verbose "User $($user.DisplayName) has OneDrive with ID: $userDriveId"
+            $user | Add-Member -NotePropertyName "OneDriveId" -NotePropertyValue $userDriveId -Force
+            $user.OneDriveId = $userDriveId
+        }
+
+        if ($null -eq $user.DriveAccess) {
+            $userDriveRoot = Send-GraphRequest -Method GET -Uri "$graphEndpoint/drives/$($user.OneDriveId)/root" -AccessToken "$accessToken" -Verbose:$SetVerbose
+            if ($LASTEXITCODE -ne 0) {
+                Write-Error "Error: Unable to get OneDrive root for user $($user.DisplayName)."
+                Write-Verbose "Error details: $userDriveRoot"
+                $user.DriveAccess = $false
+                continue
+            } else {
+                $userDriveRootObj = $userDriveRoot | ConvertFrom-Json
+                Write-Verbose "User $($user.DisplayName) OneDrive root: $($userDriveRootObj.webUrl)"
+                $user.DriveAccess = $true
+            }
+        }
+    } catch {
+        Write-Host "Error: $($_.Exception.Message)" -ForegroundColor Red
+        Write-Host "Failed to get OneDrive access for user $($user.DisplayName)."
+        continue
+    }
+
+    if ($user.DriveAccess) {
+        Write-Host "User $($user.DisplayName) has OneDrive access." -ForegroundColor Green
+        if ($matchedFolders.Count -gt 0) {
+            Write-Host "Adding folders to user $($user.DisplayName)'s OneDrive..." -ForegroundColor Green
+            foreach ($folder in $matchedFolders) {
+                Write-Host "  - Adding folder: $($folder.FolderName) to OneDrive" -ForegroundColor Green
+                
+
+            }
+        } else {
+            Write-Host "No folders found for user $($user.DisplayName) in OneDrive." -ForegroundColor Yellow
+        }
+    } else {
+        Write-Host "Skipping User $($user.DisplayName) - Either no Onedrive access or no OneDrive found." -ForegroundColor Red
+    }
 }
 
 # Display request statistics in a more appropriate way
@@ -753,6 +1119,5 @@ Write-Host "`nSummary:" -ForegroundColor Cyan
 Write-Host "- Total Requests: $($requests.counter)" -ForegroundColor White
 Write-Host "- Successful: $($requests.succeeded.Count)" -ForegroundColor Green
 Write-Host "- Failed: $($requests.failed.Count)" -ForegroundColor Red
-
 
 pause

@@ -1,4 +1,5 @@
 function Show-UserSelectionForm {
+    [CmdletBinding()]
     param (
         [Parameter(Mandatory=$true)]
         [array]$UserList
@@ -18,9 +19,12 @@ function Show-UserSelectionForm {
         $user | Add-Member -NotePropertyName 'isExternal' -NotePropertyValue ($user.userPrincipalName -match '#EXT#')
     }
     
+    # Filter out external users immediately
+    $filteredUserList = $UserList | Where-Object { -not $_.isExternal }
+    
     $form = New-Object System.Windows.Forms.Form
     $form.Text = "Select Users for Shortcut Creation"
-    $form.Size = New-Object System.Drawing.Size(700, 520)
+    $form.Size = New-Object System.Drawing.Size(700, 530)
     $form.StartPosition = "CenterScreen"
     $form.FormBorderStyle = [System.Windows.Forms.FormBorderStyle]::FixedDialog
     $form.MaximizeBox = $false
@@ -119,10 +123,28 @@ function Show-UserSelectionForm {
 
     $form.Controls.Add($searchPanel)
 
-    # Improved DataGridView
+    # Add warning message about external users
+    $warningPanel = New-Object System.Windows.Forms.Panel
+    $warningPanel.Size = New-Object System.Drawing.Size(660, 30)
+    $warningPanel.Location = New-Object System.Drawing.Point(10, 60)
+    $warningPanel.BackColor = [System.Drawing.Color]::FromArgb(255, 240, 240)
+    $warningPanel.BorderStyle = [System.Windows.Forms.BorderStyle]::FixedSingle
+
+    $warningLabel = New-Object System.Windows.Forms.Label
+    $warningLabel.Size = New-Object System.Drawing.Size(640, 25)
+    $warningLabel.Location = New-Object System.Drawing.Point(10, 2)
+    $warningLabel.Text = "External Users are not supported and therefore filtered out."
+    $warningLabel.TextAlign = [System.Drawing.ContentAlignment]::MiddleLeft
+    $warningLabel.Font = New-Object System.Drawing.Font("Arial", 9, [System.Drawing.FontStyle]::Bold)
+    $warningLabel.ForeColor = [System.Drawing.Color]::FromArgb(180, 0, 0)
+    $warningPanel.Controls.Add($warningLabel)
+
+    $form.Controls.Add($warningPanel)
+
+    # Improved DataGridView - adjust position to accommodate the warning panel
     $dataGridView = New-Object System.Windows.Forms.DataGridView
-    $dataGridView.Size = New-Object System.Drawing.Size(660, 370)
-    $dataGridView.Location = New-Object System.Drawing.Point(10, 60)
+    $dataGridView.Size = New-Object System.Drawing.Size(660, 340) # Reduced height to fit the warning panel
+    $dataGridView.Location = New-Object System.Drawing.Point(10, 100) # Adjusted position below warning panel
     $dataGridView.AllowUserToAddRows = $false
     $dataGridView.AllowUserToDeleteRows = $false
     $dataGridView.SelectionMode = 'FullRowSelect'
@@ -169,19 +191,14 @@ function Show-UserSelectionForm {
 
     $nameColumn = Add-ReadOnlyColumn -Name "DisplayName" -HeaderText "Display Name" -FillWeight 40
     $mailColumn = Add-ReadOnlyColumn -Name "Mail" -HeaderText "Email" -FillWeight 45
-    # Fix 3: Change FillWeight from 0 to a small value (1)
     $idColumn = Add-ReadOnlyColumn -Name "Id" -HeaderText "ID" -FillWeight 1
-    
-    # Add external indicator column
-    $externalColumn = Add-ReadOnlyColumn -Name "External" -HeaderText "External" -FillWeight 15
     
     $dataGridView.Columns.Add($nameColumn) | Out-Null
     $dataGridView.Columns.Add($mailColumn) | Out-Null
-    $dataGridView.Columns.Add($externalColumn) | Out-Null
     $dataGridView.Columns.Add($idColumn) | Out-Null
     
     # Hide the ID column as it's not typically needed for user display
-    $dataGridView.Columns[4].Visible = $false
+    $dataGridView.Columns[3].Visible = $false
 
     # Style the header
     $dataGridView.ColumnHeadersDefaultCellStyle.Font = New-Object System.Drawing.Font("Arial", 9, [System.Drawing.FontStyle]::Bold)
@@ -195,28 +212,22 @@ function Show-UserSelectionForm {
     $form.Controls.Add($dataGridView)
 
     # Create styled buttons
-    $selectAllButton = Add-StyledButton -Text "Select All" -X 10 -Y 440
+    $selectAllButton = Add-StyledButton -Text "Select All" -X 10 -Y 450
     $form.Controls.Add($selectAllButton)
 
-    $deselectAllButton = Add-StyledButton -Text "Deselect All" -X 120 -Y 440
+    $deselectAllButton = Add-StyledButton -Text "Deselect All" -X 120 -Y 450
     $form.Controls.Add($deselectAllButton)
 
     # Add a count indicator label
     $countLabel = New-Object System.Windows.Forms.Label
-    $countLabel.Size = New-Object System.Drawing.Size(130, 23)
-    $countLabel.Location = New-Object System.Drawing.Point(230, 444)
+    $countLabel.Size = New-Object System.Drawing.Size(280, 23)
+    $countLabel.Location = New-Object System.Drawing.Point(230, 454)
     $countLabel.Font = New-Object System.Drawing.Font("Arial", 9)
     $countLabel.ForeColor = [System.Drawing.Color]::FromArgb(60, 60, 60)
     $countLabel.TextAlign = [System.Drawing.ContentAlignment]::MiddleLeft
     $form.Controls.Add($countLabel)
 
-    # Add toggle external users button
-    $toggleExternalButton = Add-StyledButton -Text "Hide External Users" -X 400 -Y 440 -Width 150
-    $form.Controls.Add($toggleExternalButton)
-    # Variable to track if external users are visible
-    $script:showExternalUsers = $true
-
-    $okButton = Add-StyledButton -Text "OK" -X 580 -Y 440 -Width 100 -Height 35 -Primary $true
+    $okButton = Add-StyledButton -Text "OK" -X 580 -Y 450 -Width 100 -Height 35 -Primary $true
     $okButton.DialogResult = [System.Windows.Forms.DialogResult]::OK
     $form.AcceptButton = $okButton
     $form.Controls.Add($okButton)
@@ -233,44 +244,30 @@ function Show-UserSelectionForm {
     # Add all users to the DataGridView with filtering
     function Set-AllUsers {
         param (
-            [string]$SearchText = "",
-            [bool]$ShowExternal = $true
+            [string]$SearchText = ""
         )
         
         $dataGridView.SuspendLayout()
         $dataGridView.Rows.Clear()
         
-        $filteredUsers = $UserList
+        $displayUsers = $filteredUserList
         
         # Apply search filter if search text exists and isn't the placeholder
         if ($SearchText -ne "" -and $SearchText -ne "Search by name or email...") {
             $searchText = $SearchText.ToLower()
-            $filteredUsers = $filteredUsers | Where-Object { 
+            $displayUsers = $displayUsers | Where-Object { 
                 $_.displayName -like "*$searchText*" -or 
-                $_.mail -like "*$searchText*" 
+                $_.userPrincipalName -like "*$searchText*" 
             }
         }
         
-        # Apply external user filter
-        if (-not $ShowExternal) {
-            $filteredUsers = $filteredUsers | Where-Object { -not $_.isExternal }
-        }
-        
-        foreach ($user in $filteredUsers) {
+        foreach ($user in $displayUsers) {
             $isChecked = $false
             if ($checkedUsers.ContainsKey($user.id)) {
                 $isChecked = $checkedUsers[$user.id]
             }
             
-            # Display external indicator
-            $externalIndicator = if ($user.isExternal) { "Yes" } else { "" }
-            
-            $rowIdx = $dataGridView.Rows.Add($isChecked, $user.displayName, $user.mail, $externalIndicator, $user.id)
-            
-            # Highlight external users with a different color
-            if ($user.isExternal) {
-                $dataGridView.Rows[$rowIdx].DefaultCellStyle.BackColor = [System.Drawing.Color]::FromArgb(255, 244, 230)
-            }
+            $rowIdx = $dataGridView.Rows.Add($isChecked, $user.displayName, $user.userPrincipalName, $user.id)
         }
         
         $dataGridView.ResumeLayout()
@@ -282,7 +279,7 @@ function Show-UserSelectionForm {
         param($sender, $e)
         if ($e.ColumnIndex -eq 0 -and $e.RowIndex -ge 0) {
             $row = $dataGridView.Rows[$e.RowIndex]
-            $userId = $row.Cells[4].Value  # Updated index for ID
+            $userId = $row.Cells[3].Value  # Updated index for ID
             $checkedUsers[$userId] = $row.Cells[0].Value
             Update-SelectionCount
         }
@@ -357,7 +354,7 @@ function Show-UserSelectionForm {
         # Check all visible items
         for ($i = 0; $i -lt $dataGridView.Rows.Count; $i++) {
             $dataGridView.Rows[$i].Cells[0].Value = $true
-            $userId = $dataGridView.Rows[$i].Cells[4].Value  # Updated index for ID
+            $userId = $dataGridView.Rows[$i].Cells[3].Value  # Updated index for ID
             $checkedUsers[$userId] = $true
         }
         
@@ -372,7 +369,7 @@ function Show-UserSelectionForm {
         # Uncheck all visible items
         for ($i = 0; $i -lt $dataGridView.Rows.Count; $i++) {
             $dataGridView.Rows[$i].Cells[0].Value = $false
-            $userId = $dataGridView.Rows[$i].Cells[4].Value  # Updated index for ID
+            $userId = $dataGridView.Rows[$i].Cells[3].Value  # Updated index for ID
             $checkedUsers[$userId] = $false
         }
         
@@ -380,47 +377,15 @@ function Show-UserSelectionForm {
         Update-SelectionCount
     })
 
-# Toggle external users button event
-$toggleExternalButton.Add_Click({
-    # Toggle the visibility state
-    $script:showExternalUsers = -not $script:showExternalUsers
-    
-    # Update button text based on state
-    if ($script:showExternalUsers) {
-        $toggleExternalButton.Text = "Hide External Users"
-    } else {
-        $toggleExternalButton.Text = "Show External Users"
-    }
-    
-    # Force button to stay enabled and visible
-    $toggleExternalButton.Enabled = $true
-    $toggleExternalButton.Visible = $true
-    
-    # Apply background color (ensure it's not gray)
-    if ($script:showExternalUsers) {
-        $toggleExternalButton.BackColor = [System.Drawing.Color]::FromArgb(255, 255, 255)
-    } else {
-        # Slight color difference when showing state
-        $toggleExternalButton.BackColor = [System.Drawing.Color]::FromArgb(240, 240, 240)
-    }
-    
-    # Refresh user list with current search and external filter settings
-    $currentSearch = if ($searchBox.Text -eq "Search by name or email...") { "" } else { $searchBox.Text }
-    Set-AllUsers -SearchText $currentSearch -ShowExternal $script:showExternalUsers
-    
-    # Force immediate redraw of the button
-    $toggleExternalButton.Refresh()
-})
-
     # Add search functionality - Modified to handle placeholder text
     $searchBox.add_TextChanged({
         # Skip search when showing placeholder text
         if ($searchBox.Text -eq "Search by name or email..." -or $null -eq $searchBox.Text) {
-            Set-AllUsers -ShowExternal $showExternalUsers
+            Set-AllUsers
             return
         }
         
-        Set-AllUsers -SearchText $searchBox.Text -ShowExternal $showExternalUsers
+        Set-AllUsers -SearchText $searchBox.Text
     })
 
     # Add double-click to toggle checkbox
@@ -434,18 +399,18 @@ $toggleExternalButton.Add_Click({
     })
 
     # Initialize with all users
-    Set-AllUsers -ShowExternal $showExternalUsers
+    Set-AllUsers
 
     $result = $form.ShowDialog()
     $selectedUsers = @()
     if ($result -eq [System.Windows.Forms.DialogResult]::OK) {
-        foreach ($user in $UserList) {
+        foreach ($user in $filteredUserList) {
             if ($checkedUsers.ContainsKey($user.id) -and $checkedUsers[$user.id]) {
                 $selectedUsers += [PSCustomObject]@{
                     DisplayName = $user.displayName
-                    Mail        = $user.mail
+                    Mail        = $user.userPrincipalName
                     Id          = $user.id
-                    IsExternal  = $user.isExternal
+                    IsExternal  = $false # We know they're not external since we filtered
                 }
             }
         }
@@ -454,6 +419,7 @@ $toggleExternalButton.Add_Click({
 }
 
 function Show-SiteSelectionForm {
+    [CmdletBinding()]
     param (
         [Parameter(Mandatory=$true)]
         [array]$SiteList
@@ -904,6 +870,7 @@ function Show-SiteSelectionForm {
 }
 
 function Show-FolderSelectionForm {
+    [CmdletBinding()]
     param (
         [Parameter(Mandatory=$true)]
         [array]$DriveList,
@@ -1400,7 +1367,10 @@ function Show-FolderSelectionForm {
                 
                 # Get root folder ID
                 $rootUrl = "$graphEndpoint/drives/$DriveId/root"
-                $rootResponse = Get-GraphRequest -Uri $rootUrl -AccessToken $AccessToken
+                $rootResponse = Send-GraphRequest -Method GET -Uri $rootUrl -AccessToken $AccessToken
+                if ($LASTEXITCODE -ne 0) {
+                    Write-Error "Failed to get root folder: $rootResponse"
+                }
                 $rootObject = $rootResponse | ConvertFrom-Json
                 $script:currentItemId = $rootObject.id
                 
@@ -1430,7 +1400,10 @@ function Show-FolderSelectionForm {
                 
                 # Get parent item details for navigation path
                 $itemUrl = "$graphEndpoint/drives/$DriveId/items/$ItemId"
-                $itemResponse = Get-GraphRequest -Uri $itemUrl -AccessToken $AccessToken
+                $itemResponse = Send-GraphRequest -Method GET -Uri $itemUrl -AccessToken $AccessToken
+                if ($LASTEXITCODE -ne 0) {
+                    Write-Error "Failed to get item details: $itemResponse"
+                }
                 $itemObject = $itemResponse | ConvertFrom-Json
                 
                 # If navigating to a new folder (not refreshing)
@@ -1491,7 +1464,10 @@ function Show-FolderSelectionForm {
             $script:currentItemId = $ItemId
             
             # Get children
-            $response = Get-GraphRequest -Uri $childrenUrl -AccessToken $AccessToken
+            $response = Send-GraphRequest -Method GET -Uri $childrenUrl -AccessToken $AccessToken
+            if ($LASTEXITCODE -ne 0) {
+                Write-Error "Failed to get children: $response"
+            }
             $items = ($response | ConvertFrom-Json).value
             
             # Store current items
@@ -1731,7 +1707,10 @@ function Show-FolderSelectionForm {
             
             try {
                 # Get children
-                $response = Get-GraphRequest -Uri $childrenUrl -AccessToken $AccessToken
+                $response = Send-GraphRequest -Method GET -Uri $childrenUrl -AccessToken $AccessToken
+                if ($LASTEXITCODE -ne 0) {
+                    Write-Error "Failed to get children: $response"
+                }
                 $items = ($response | ConvertFrom-Json).value
                 
                 # Store current items
@@ -1972,10 +1951,19 @@ function Show-FolderSelectionForm {
                 # Get drive info
                 $drive = $DriveList | Where-Object { $_.id -eq $driveId } | Select-Object -First 1
                 
-                # Get folder info - we need to make an API call for each selected folder
-                $folderUrl = "$graphEndpoint/drives/$driveId/items/$folderId"
-                $folderResponse = Get-GraphRequest -Uri $folderUrl -AccessToken $AccessToken
-                $folder = $folderResponse | ConvertFrom-Json
+                try {
+                    # Get folder info - we need to make an API call for each selected folder
+                    $folderUrl = "$graphEndpoint/drives/$driveId/items/$folderId"
+                    $folderResponse = Send-GraphRequest -Method GET -Uri $folderUrl -AccessToken $AccessToken
+                    if ($LASTEXITCODE -ne 0) {
+                        Write-Error "Error retrieving folder details: $($folderResponse)"
+                    }
+                    $folder = $folderResponse | ConvertFrom-Json
+                } catch {
+                    Write-Error "Error retrieving folder details: $($_.Exception.Message)"
+                    Pause
+                    exit 1
+                }
                 
                 # Add to result
                 $selectedFolders += [PSCustomObject]@{
@@ -1985,11 +1973,449 @@ function Show-FolderSelectionForm {
                     FolderId = $folderId
                     FolderName = $folder.name
                     WebUrl = $folder.webUrl
-                    Path = $folder.parentReference.path
+                    Path = if ($folder.parentReference.path) { $folder.parentReference.path } else { "/" }
+                    webId = $DriveList | Where-Object { $_.id -eq $driveId } | Select-Object -ExpandProperty webId
+                    siteId = $DriveList | Where-Object { $_.id -eq $driveId } | Select-Object -ExpandProperty siteId
+                    siteWebUrl = $DriveList | Where-Object { $_.id -eq $driveId } | Select-Object -ExpandProperty webUrl
                 }
             }
         }
     }
     
     return $selectedFolders
+}
+
+function Show-FolderNameEditForm {
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory=$true)]
+        [array]$SelectedFolders
+    )
+
+    # Try to load icon with error handling
+    $Micon = $null
+    try {
+        $Micon = [System.Drawing.Icon]::ExtractAssociatedIcon("$workpath\images\icons\Microsoft_logo.ico")
+    } catch {
+        Write-Verbose "Unable to load icon: $_"
+    }
+    
+    # Try to load folder icon
+    $folderIcon = $null
+    try {
+        $folderIcon = [System.Drawing.Icon]::ExtractAssociatedIcon("$workpath\images\icons\Folder_icon.ico")
+    } catch {
+        Write-Verbose "Unable to load folder icon: $_"
+    }
+    
+    $form = New-Object System.Windows.Forms.Form
+    $form.Text = "Edit Folder Names"
+    $form.Size = New-Object System.Drawing.Size(800, 550)
+    $form.StartPosition = "CenterScreen"
+    $form.FormBorderStyle = [System.Windows.Forms.FormBorderStyle]::FixedDialog
+    $form.MaximizeBox = $false
+    $form.MinimizeBox = $false
+    $form.TopMost = $true
+    if ($Micon) { $form.Icon = $Micon }
+    $form.Font = New-Object System.Drawing.Font("Arial", 9)
+    $form.BackColor = [System.Drawing.Color]::FromArgb(245, 245, 245)
+
+    # Create a consistent style for buttons
+    function Add-StyledButton {
+        param (
+            [string]$Text, 
+            [int]$X, 
+            [int]$Y, 
+            [int]$Width = 100, 
+            [int]$Height = 30,
+            [bool]$Primary = $false
+        )
+        
+        $button = New-Object System.Windows.Forms.Button
+        $button.Text = $Text
+        $button.Size = New-Object System.Drawing.Size($Width, $Height)
+        $button.Location = New-Object System.Drawing.Point($X, $Y)
+        $button.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
+        $button.Cursor = [System.Windows.Forms.Cursors]::Hand
+        
+        if ($Primary) {
+            $button.BackColor = [System.Drawing.Color]::FromArgb(0, 120, 215)
+            $button.ForeColor = [System.Drawing.Color]::White
+            $button.Font = New-Object System.Drawing.Font("Arial", 10, [System.Drawing.FontStyle]::Bold)
+            $button.FlatAppearance.BorderSize = 0
+            $button.FlatAppearance.MouseOverBackColor = [System.Drawing.Color]::FromArgb(0, 102, 204)
+            $button.FlatAppearance.MouseDownBackColor = [System.Drawing.Color]::FromArgb(0, 90, 180)
+        } else {
+            $button.BackColor = [System.Drawing.Color]::FromArgb(255, 255, 255)
+            $button.ForeColor = [System.Drawing.Color]::FromArgb(60, 60, 60)
+            $button.Font = New-Object System.Drawing.Font("Arial", 9)
+            $button.FlatAppearance.BorderColor = [System.Drawing.Color]::FromArgb(200, 200, 200)
+            $button.FlatAppearance.BorderSize = 1
+            $button.FlatAppearance.MouseOverBackColor = [System.Drawing.Color]::FromArgb(240, 240, 240)
+            $button.FlatAppearance.MouseDownBackColor = [System.Drawing.Color]::FromArgb(230, 230, 230)
+        }
+        
+        return $button
+    }
+
+    # Top instruction panel
+    $instructionPanel = New-Object System.Windows.Forms.Panel
+    $instructionPanel.Size = New-Object System.Drawing.Size(760, 60)
+    $instructionPanel.Location = New-Object System.Drawing.Point(10, 10)
+    $instructionPanel.BackColor = [System.Drawing.Color]::FromArgb(225, 240, 250)
+    $instructionPanel.BorderStyle = [System.Windows.Forms.BorderStyle]::FixedSingle
+
+    $instructionLabel = New-Object System.Windows.Forms.Label
+    $instructionLabel.Size = New-Object System.Drawing.Size(740, 50)
+    $instructionLabel.Location = New-Object System.Drawing.Point(10, 5)
+    $instructionLabel.Text = "Note: Disable prefix before editing names, then re-enable to apply consistently. Edit the displayed name for each folder as needed. These names will be used for the shortcuts created. If you want to keep the original name, simply leave it unchanged."
+    $instructionLabel.TextAlign = [System.Drawing.ContentAlignment]::MiddleLeft
+    $instructionPanel.Controls.Add($instructionLabel)
+
+    $form.Controls.Add($instructionPanel)
+
+    # Create the DataGridView to hold folders and editable names
+    $dataGridView = New-Object System.Windows.Forms.DataGridView
+    $dataGridView.Size = New-Object System.Drawing.Size(760, 370)
+    $dataGridView.Location = New-Object System.Drawing.Point(10, 80)
+    $dataGridView.AllowUserToAddRows = $false
+    $dataGridView.AllowUserToDeleteRows = $false
+    $dataGridView.SelectionMode = 'FullRowSelect'
+    $dataGridView.MultiSelect = $false
+    $dataGridView.RowHeadersVisible = $false
+    $dataGridView.AutoSizeColumnsMode = 'Fill'
+    $dataGridView.ScrollBars = 'Vertical'
+    $dataGridView.BackgroundColor = [System.Drawing.Color]::White
+    $dataGridView.BorderStyle = [System.Windows.Forms.BorderStyle]::None
+    $dataGridView.Font = New-Object System.Drawing.Font("Arial", 9)
+    $dataGridView.GridColor = [System.Drawing.Color]::FromArgb(230, 230, 230)
+    $dataGridView.RowTemplate.Height = 36
+    $dataGridView.CellBorderStyle = [System.Windows.Forms.DataGridViewCellBorderStyle]::SingleHorizontal
+    $dataGridView.RowsDefaultCellStyle.SelectionBackColor = [System.Drawing.Color]::FromArgb(245, 249, 255)
+    $dataGridView.RowsDefaultCellStyle.SelectionForeColor = [System.Drawing.Color]::Black
+    $dataGridView.AlternatingRowsDefaultCellStyle.BackColor = [System.Drawing.Color]::FromArgb(250, 250, 250)
+
+    # Helper function to create columns
+    function Add-Column {
+        param (
+            [string]$Name,
+            [string]$HeaderText,
+            [int]$FillWeight = 30,
+            [bool]$ReadOnly = $true
+        )
+        
+        $column = New-Object System.Windows.Forms.DataGridViewTextBoxColumn
+        $column.Name = $Name
+        $column.HeaderText = $HeaderText
+        $column.ReadOnly = $ReadOnly
+        $column.FillWeight = $FillWeight
+        $column.SortMode = [System.Windows.Forms.DataGridViewColumnSortMode]::Automatic
+        $column.DefaultCellStyle.Padding = New-Object System.Windows.Forms.Padding(5, 0, 0, 0)
+        return $column
+    }
+
+    # Create image column for folder icon
+    $iconColumn = New-Object System.Windows.Forms.DataGridViewImageColumn
+    $iconColumn.HeaderText = ""
+    $iconColumn.Width = 30
+    $iconColumn.Name = "Icon"
+    $iconColumn.ReadOnly = $true
+    $iconColumn.FillWeight = 5
+    $iconColumn.ValueType = [System.Drawing.Image]
+    $dataGridView.Columns.Add($iconColumn) | Out-Null
+
+    # Original folder name column (read-only)
+    $originalNameColumn = Add-Column -Name "OriginalName" -HeaderText "Original Folder Name" -FillWeight 30
+    $dataGridView.Columns.Add($originalNameColumn) | Out-Null
+
+    # Editable display name column (user can change this)
+    $displayNameColumn = Add-Column -Name "DisplayName" -HeaderText "Display Name (Editable)" -FillWeight 40 -ReadOnly $false
+    $dataGridView.Columns.Add($displayNameColumn) | Out-Null
+
+    # Site name column (read-only)
+    $siteColumn = Add-Column -Name "SiteName" -HeaderText "Site" -FillWeight 25
+    $dataGridView.Columns.Add($siteColumn) | Out-Null
+
+    # Hidden columns for other folder properties
+    $driveIdColumn = Add-Column -Name "DriveId" -HeaderText "DriveId" -FillWeight 1
+    $driveNameColumn = Add-Column -Name "DriveName" -HeaderText "DriveName" -FillWeight 1
+    $folderIdColumn = Add-Column -Name "FolderId" -HeaderText "FolderId" -FillWeight 1
+    $webUrlColumn = Add-Column -Name "WebUrl" -HeaderText "WebUrl" -FillWeight 1
+    $pathColumn = Add-Column -Name "Path" -HeaderText "Path" -FillWeight 1
+    $webIdColumn = Add-Column -Name "webId" -HeaderText "webId" -FillWeight 1
+    $eTagColumn = Add-Column -Name "eTag" -HeaderText "eTag" -FillWeight 1
+    $eTagListColumn = Add-Column -Name "eTagList" -HeaderText "eTagList" -FillWeight 1
+    $siteWebUrlColumn = Add-Column -Name "siteWebUrl" -HeaderText "siteWebUrl" -FillWeight 1
+
+    $dataGridView.Columns.Add($driveIdColumn) | Out-Null
+    $dataGridView.Columns.Add($driveNameColumn) | Out-Null
+    $dataGridView.Columns.Add($folderIdColumn) | Out-Null
+    $dataGridView.Columns.Add($webUrlColumn) | Out-Null
+    $dataGridView.Columns.Add($pathColumn) | Out-Null
+    $dataGridView.Columns.Add($webIdColumn) | Out-Null
+    $dataGridView.Columns.Add($eTagColumn) | Out-Null
+    $dataGridView.Columns.Add($eTagListColumn) | Out-Null
+    $dataGridView.Columns.Add($siteWebUrlColumn) | Out-Null
+
+    # Hide the columns we don't need to display
+    $dataGridView.Columns[4].Visible = $false
+    $dataGridView.Columns[5].Visible = $false
+    $dataGridView.Columns[6].Visible = $false
+    $dataGridView.Columns[7].Visible = $false
+    $dataGridView.Columns[8].Visible = $false
+    $dataGridView.Columns[9].Visible = $false
+    $dataGridView.Columns[10].Visible = $false
+    $dataGridView.Columns[11].Visible = $false
+    $dataGridView.Columns[12].Visible = $false
+
+    # Style the header
+    $dataGridView.ColumnHeadersDefaultCellStyle.Font = New-Object System.Drawing.Font("Arial", 9, [System.Drawing.FontStyle]::Bold)
+    $dataGridView.ColumnHeadersDefaultCellStyle.BackColor = [System.Drawing.Color]::FromArgb(240, 240, 240)
+    $dataGridView.ColumnHeadersDefaultCellStyle.ForeColor = [System.Drawing.Color]::FromArgb(50, 50, 50)
+    $dataGridView.ColumnHeadersDefaultCellStyle.Padding = New-Object System.Windows.Forms.Padding(5, 0, 0, 0)
+    $dataGridView.ColumnHeadersHeightSizeMode = [System.Windows.Forms.DataGridViewColumnHeadersHeightSizeMode]::DisableResizing
+    $dataGridView.ColumnHeadersHeight = 35
+    $dataGridView.EnableHeadersVisualStyles = $false
+
+    $form.Controls.Add($dataGridView)
+
+    # Convert folder icon to bitmap if available
+    $folderBitmap = $null
+    if ($folderIcon) {
+        $folderBitmap = $folderIcon.ToBitmap()
+    }
+
+    # Add all selected folders to the grid
+    foreach ($folder in $SelectedFolders) {
+        $dataGridView.Rows.Add(
+            $folderBitmap,
+            $folder.FolderName,
+            $folder.FolderName,  # Initially set display name to original name
+            $folder.SiteDisplayName,
+            $folder.DriveId,
+            $folder.DriveName,
+            $folder.FolderId,
+            $folder.WebUrl,
+            $folder.Path,
+            $folder.webId,
+            $folder.eTag,
+            $folder.eTagList,
+            $folder.siteWebUrl
+        ) | Out-Null
+    }
+
+    # Bottom panel to hold buttons and count information
+    $bottomPanel = New-Object System.Windows.Forms.Panel
+    $bottomPanel.Size = New-Object System.Drawing.Size(760, 50)
+    $bottomPanel.Location = New-Object System.Drawing.Point(10, 460)
+    $bottomPanel.BackColor = [System.Drawing.Color]::FromArgb(245, 245, 245)
+
+    # Button for resetting all display names to original names
+    $resetAllButton = Add-StyledButton -Text "Reset All Names" -X 10 -Y 15 -Width 150
+    $bottomPanel.Controls.Add($resetAllButton)
+
+    # Create a styled checkbox panel
+    $checkboxPanel = New-Object System.Windows.Forms.Panel
+    $checkboxPanel.Size = New-Object System.Drawing.Size(200, 30)
+    $checkboxPanel.Location = New-Object System.Drawing.Point(170, 15)
+    $checkboxPanel.BackColor = [System.Drawing.Color]::FromArgb(255, 255, 255)
+    $checkboxPanel.BorderStyle = [System.Windows.Forms.BorderStyle]::FixedSingle
+
+    # Create checkbox for toggling site name prefix
+    $prefixCheckbox = New-Object System.Windows.Forms.CheckBox
+    $prefixCheckbox.Text = "Add site name as prefix"
+    $prefixCheckbox.Size = New-Object System.Drawing.Size(170, 23)
+    $prefixCheckbox.Location = New-Object System.Drawing.Point(10, 4)
+    $prefixCheckbox.Checked = $true # Enable by default
+    $prefixCheckbox.Font = New-Object System.Drawing.Font("Arial", 9)
+    $prefixCheckbox.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
+    $prefixCheckbox.BackColor = [System.Drawing.Color]::Transparent
+    $checkboxPanel.Controls.Add($prefixCheckbox)
+    $bottomPanel.Controls.Add($checkboxPanel)
+
+    $countLabel = New-Object System.Windows.Forms.Label
+    $countLabel.Location = New-Object System.Drawing.Point(380, 15)
+    $countLabel.Size = New-Object System.Drawing.Size(225, 28)
+    $countLabel.Font = New-Object System.Drawing.Font("Arial", 9)
+    $countLabel.ForeColor = [System.Drawing.Color]::FromArgb(60, 60, 60)
+    $countLabel.TextAlign = [System.Drawing.ContentAlignment]::MiddleLeft
+    $countLabel.Text = "$($SelectedFolders.Count) folders selected for shortcut creation"
+    $bottomPanel.Controls.Add($countLabel)
+
+    # OK button
+    $okButton = Add-StyledButton -Text "OK" -X 650 -Y 10 -Width 100 -Height 35 -Primary $true
+    $okButton.DialogResult = [System.Windows.Forms.DialogResult]::OK
+    $form.AcceptButton = $okButton
+    $bottomPanel.Controls.Add($okButton)
+
+    $form.Controls.Add($bottomPanel)
+
+    # Function to apply site name prefixes to all display names
+    function Apply-SitePrefixes {
+        $dataGridView.SuspendLayout()
+        
+        # Apply site name prefix to all display names
+        for ($i = 0; $i -lt $dataGridView.Rows.Count; $i++) {
+            $originalName = $dataGridView.Rows[$i].Cells["OriginalName"].Value
+            $siteName = $dataGridView.Rows[$i].Cells["SiteName"].Value
+            $currentDisplayName = $dataGridView.Rows[$i].Cells["DisplayName"].Value
+            
+            # Check if prefix already exists to avoid duplicates
+            if (-not $currentDisplayName.StartsWith("$siteName - ")) {
+                $dataGridView.Rows[$i].Cells["DisplayName"].Value = "$siteName - $currentDisplayName"
+            }
+        }
+        
+        $dataGridView.ResumeLayout()
+    }
+
+    # Function to remove site name prefixes from all display names
+    function Remove-SitePrefixes {
+        $dataGridView.SuspendLayout()
+        
+        # Remove site name prefix from all display names
+        for ($i = 0; $i -lt $dataGridView.Rows.Count; $i++) {
+            $originalName = $dataGridView.Rows[$i].Cells["OriginalName"].Value
+            $siteName = $dataGridView.Rows[$i].Cells["SiteName"].Value
+            $currentDisplayName = $dataGridView.Rows[$i].Cells["DisplayName"].Value
+            
+            # If display name starts with site name prefix, remove it
+            if ($currentDisplayName.StartsWith("$siteName - ")) {
+                $dataGridView.Rows[$i].Cells["DisplayName"].Value = $currentDisplayName.Substring(($siteName + " - ").Length)
+            }
+        }
+        
+        $dataGridView.ResumeLayout()
+    }
+
+    # Handle checkbox state change
+    $prefixCheckbox.Add_CheckedChanged({
+        if ($prefixCheckbox.Checked) {
+            Apply-SitePrefixes
+        } else {
+            Remove-SitePrefixes
+        }
+    })
+
+    # Apply site prefixes by default when form loads
+    $form.add_Shown({
+        if ($prefixCheckbox.Checked) {
+            Apply-SitePrefixes
+        }
+    })
+
+    # Event handler for the reset all button
+    $resetAllButton.Add_Click({
+        $dataGridView.SuspendLayout()
+        
+        # Reset all display names to original names
+        for ($i = 0; $i -lt $dataGridView.Rows.Count; $i++) {
+            $originalName = $dataGridView.Rows[$i].Cells["OriginalName"].Value
+            $dataGridView.Rows[$i].Cells["DisplayName"].Value = $originalName
+        }
+        
+        $dataGridView.ResumeLayout()
+
+        # Re-apply prefixes if checkbox is checked
+        if ($prefixCheckbox.Checked) {
+            Apply-SitePrefixes
+        }
+    })
+
+    # Event handler for double-click on a cell to reset just that row
+    $dataGridView.add_CellDoubleClick({
+        param($sender, $e)
+        # Only allow double-click on display name column
+        if ($e.RowIndex -ge 0 -and $e.ColumnIndex -eq $dataGridView.Columns["DisplayName"].Index) {
+            $originalName = $dataGridView.Rows[$e.RowIndex].Cells["OriginalName"].Value
+            $dataGridView.Rows[$e.RowIndex].Cells["DisplayName"].Value = $originalName
+        }
+    })
+
+    # Show the form
+    $result = $form.ShowDialog()
+    
+    # Process results
+    [array]$editedFolders = @()
+    if ($result -eq [System.Windows.Forms.DialogResult]::OK) {
+        Write-Verbose "Processing form results - OK button clicked"
+        # Create a mapping of edited display names (only get what was changed in the grid)
+        $displayNameMap = @{}
+        
+        Write-Verbose "DataGridView has $($dataGridView.RowCount) rows"
+        
+        # Loop through grid rows to get edited display names keyed by a composite of driveId + folderId
+        for ($i = 0; $i -lt $dataGridView.RowCount; $i++) {
+            # Skip the "new row" that's empty at the bottom
+            if ($dataGridView.Rows[$i].IsNewRow) { 
+                Write-Verbose "Skipping new row at index $i"
+                continue 
+            }
+            
+            $driveId = $dataGridView.Rows[$i].Cells["DriveId"].Value
+            $folderId = $dataGridView.Rows[$i].Cells["FolderId"].Value
+            $displayName = $dataGridView.Rows[$i].Cells["DisplayName"].Value
+            $originalName = $dataGridView.Rows[$i].Cells["OriginalName"].Value
+            
+            Write-Verbose "Row $i - DriveId: $driveId, FolderId: $folderId"
+            Write-Verbose "Row $i - Original name: $originalName, Display name: $displayName"
+            
+            # Create a unique key from driveId and folderId
+            $key = "$driveId|$folderId"
+            
+            # Store the edited display name
+            $displayNameMap[$key] = $displayName
+            Write-Verbose "Added to map with key: $key = $displayName"
+        }
+        
+        Write-Verbose "Display name map created with $($displayNameMap.Count) entries"
+        Write-Verbose "Original SelectedFolders collection has $($SelectedFolders.Count) folders"
+        
+        # Now create result objects using original data plus edited display names
+        foreach ($folder in $SelectedFolders) {
+            # Create the same key to look up display name
+            $key = "$($folder.DriveId)|$($folder.FolderId)"
+            Write-Verbose "Processing folder with key: $key"
+            
+            # Get the edited display name or fallback to original
+            $displayName = if ($displayNameMap.ContainsKey($key)) { 
+                Write-Verbose "Found edited name in map: $($displayNameMap[$key])"
+                $displayNameMap[$key] 
+            } else { 
+                Write-Verbose "No edited name found, using original: $($folder.FolderName)"
+                $folder.FolderName 
+            }
+            
+            Write-Verbose "Creating result object with display name: $displayName"
+            
+            # Create a new result object with all original properties plus the edited display name
+            if ($folder.DriveId -and $folder.FolderId) {
+                $newFolder = [PSCustomObject]@{
+                    DriveId = $folder.DriveId
+                    DriveName = $folder.DriveName
+                    SiteDisplayName = $folder.SiteDisplayName
+                    FolderId = $folder.FolderId
+                    FolderName = $folder.FolderName
+                    DisplayName = $displayName
+                    WebUrl = $folder.WebUrl
+                    Path = $folder.Path
+                    webId = $folder.webId
+                    siteId = $folder.siteId
+                    eTag = $folder.eTag
+                    eTagList = $folder.eTagList
+                    siteWebUrl = $folder.siteWebUrl
+                }
+            $editedFolders += $newFolder
+            Write-Verbose "Added folder to result collection - DriveId: $($newFolder.DriveId), FolderId: $($newFolder.FolderId)"
+            }
+        }
+        
+        Write-Verbose "Created $($editedFolders.Count) result objects"
+    }
+    else {
+        Write-Verbose "User canceled the operation, returning empty collection"
+    }
+
+    Write-Verbose "Returning result collection with $($editedFolders.Count) items"
+    return ,[array]$editedFolders
 }

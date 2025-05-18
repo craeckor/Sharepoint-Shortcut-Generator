@@ -1,3 +1,6 @@
+[CmdletBinding(SupportsShouldProcess=$true)]
+Param()
+
 $workpath = $PSScriptRoot
 Set-Location -Path $workpath
 $url = "https://admin.microsoft.com/login"
@@ -42,8 +45,9 @@ $img.SizeMode = "AutoSize"
 
 # Add a red important information label below the image
 $label = New-Object System.Windows.Forms.Label
-$label.Text = "Selecting YES at STAY SIGNED IN is required to save the cookies in the browser cache.`r`n" +
-              "If you select NO, the cookies will not be saved and the script will not work. "
+$label.Text = "DO NOT CLOSE the BROWSER WINDOW, it will CLOSE AUTOMATICALLY after the LOGIN.`r`n" +
+              "Selecting YES at STAY SIGNED IN is REQUIRED to save the cookies in the browser cache.`r`n" +
+              "If you select NO, the cookies will not be saved and the script WILL NOT WORK."
 $label.AutoSize = $true
 $label.ForeColor = [System.Drawing.Color]::Red
 
@@ -90,12 +94,38 @@ if ($result -ne [System.Windows.Forms.DialogResult]::OK) {
 }
 
 try {
-    Invoke-WebView2 -uri "$url" -UrlCloseConditionRegex "$quiturl" -title "Microsoft Login - Microsoft Admincenter" | Out-Null
+    $response = Invoke-WebView2 -uri "$url" -UrlCloseConditionRegex "$quiturl" -title "Microsoft Login - Microsoft Admincenter"
+    if ($response -eq $null) {
+        return "No response from WebView2"
+    }
+    if ($response -notlike "*https://admin.microsoft.com*") {
+        Write-Error -Message "Login failed. Please check your credentials and try again."
+        return "Login failed. Please check your credentials and try again."
+    }
 } catch {
     return $($_.Exception.Message)
 }
+
 try {
     $cookies = Get-DecryptedCookiesInfo -Browser "CustomChrome" -DomainName "$searchdomain" -customPath "$cookiePath"
+    
+    # Check if required cookies exist by looking at the name property of each cookie object
+    $hasOIDCAuthCookie = $false
+    $hasRootAuthToken = $false
+    
+    foreach ($cookie in $cookies) {
+        if ($cookie.name -eq "OIDCAuthCookie") {
+            $hasOIDCAuthCookie = $true
+        }
+        if ($cookie.name -eq "RootAuthToken") {
+            $hasRootAuthToken = $true
+        }
+    }
+    
+    if (-not ($hasOIDCAuthCookie -and $hasRootAuthToken)) {
+        Write-Error -Message "Required cookies not found. Please check your login status."
+        return "Required cookies not found. Please check your login status."
+    }
 } catch {
     return $($_.Exception.Message)
 }
