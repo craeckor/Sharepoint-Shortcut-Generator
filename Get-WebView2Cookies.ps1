@@ -96,11 +96,11 @@ if ($result -ne [System.Windows.Forms.DialogResult]::OK) {
 try {
     $response = Invoke-WebView2 -uri "$url" -UrlCloseConditionRegex "$quiturl" -title "Microsoft Login - Microsoft Admincenter"
     if ($response -eq $null) {
-        return "No response from WebView2"
+        return "Error: No response from WebView2"
     }
     if ($response -notlike "*https://admin.microsoft.com*") {
         Write-Error -Message "Login failed. Please check your credentials and try again."
-        return "Login failed. Please check your credentials and try again."
+        return "Error: Login failed. Please check your credentials and try again."
     }
 } catch {
     return $($_.Exception.Message)
@@ -124,7 +124,7 @@ try {
     
     if (-not ($hasOIDCAuthCookie -and $hasRootAuthToken)) {
         Write-Error -Message "Required cookies not found. Please check your login status."
-        return "Required cookies not found. Please check your login status."
+        return "Error: Required cookies not found. Please check your login status."
     }
 } catch {
     return $($_.Exception.Message)

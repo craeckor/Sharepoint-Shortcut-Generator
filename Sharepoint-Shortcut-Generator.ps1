@@ -544,10 +544,9 @@ try {
     Write-Host "Starting OAuth2 authentication process..."
     $tokenInfo = Get-OAuth2Token -TenantId $tenantId -ClientId $clientId -Verbose:$SetVerbose
     $accessToken = $tokenInfo.AccessToken
-    
     Write-Verbose "Token will expire at: $($tokenInfo.ExpiresAt)"
 } catch {
-    Write-Host "Error: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Error "Error: $($_.Exception.Message)"
     pause
     exit 1
 }
@@ -562,7 +561,7 @@ try {
         exit 1
     }
 } catch {
-    Write-Host "Error: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Error "Error: $($_.Exception.Message)"
     pause
     exit 1
 }
@@ -581,7 +580,7 @@ Write-Host "Please select the users you want to work with..."
 $selectedUsers = Show-UserSelectionForm -userList $allUsersObj.value -Verbose:$SetVerbose
 
 if (-not $selectedUsers -or $selectedUsers.Count -eq 0) {
-    Write-Host "No users selected. Exiting..."
+    Write-Error "No users selected. Exiting..."
     pause
     exit
 }
@@ -605,7 +604,7 @@ try {
         exit 1
     }
 } catch {
-    Write-Host "Error: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Error "Error: $($_.Exception.Message)"
     pause
     exit 1
 }
@@ -630,7 +629,7 @@ Write-Host "Please select the sites you want to work with..."
 $selectedSites = Show-SiteSelectionForm -SiteList $allSitesObj.value -Verbose:$SetVerbose
 
 if (-not $selectedSites -or $selectedSites.Count -eq 0) {
-    Write-Host "No sites selected. Exiting..."
+    Write-Error "No sites selected. Exiting..."
     pause
     exit
 }
@@ -665,7 +664,7 @@ foreach ($site in $sites.list) {
             exit 1
         }
     } catch {
-        Write-Host "Error: $($_.Exception.Message)" -ForegroundColor Red
+        Write-Error "Error: $($_.Exception.Message)"
         Pause
         exit 1
     }
@@ -695,7 +694,7 @@ foreach ($site in $sites.list) {
             exit 1
         }
     } catch {
-        Write-Host "Error: $($_.Exception.Message)" -ForegroundColor Red
+        Write-Error "Error: $($_.Exception.Message)"
         Pause
         exit 1
     }
@@ -703,8 +702,9 @@ foreach ($site in $sites.list) {
     $permissionslistId = $permissionslistObj.value | Where-Object {$_.displayName -eq "User Information List"} | Select-Object -ExpandProperty id
     
     if (-not $permissionslistId) {
-        Write-Warning "No 'User Information List' found for site: $($site.displayName)"
-        continue
+        Write-Error "Error: No 'User Information List' found for site: $($site.displayName)"
+        pause
+        exit 1
     }
     
     # Get list items with all fields
@@ -716,7 +716,7 @@ foreach ($site in $sites.list) {
             exit 1
         }
     } catch {
-        Write-Host "Error: $($_.Exception.Message)" -ForegroundColor Red
+        Write-Error "Error: $($_.Exception.Message)"
         Pause
         exit 1
     }
@@ -740,6 +740,8 @@ foreach ($site in $sites.list) {
 }
 
 Write-Host "Associating users with sites..."
+
+$totalaccessCount = 0
 
 foreach ($user in $users.list) {
     $user | Add-Member -NotePropertyName "sites" -NotePropertyValue @{} -Force
@@ -768,9 +770,16 @@ foreach ($user in $users.list) {
     $siteCount = $user.sites.Count
     if ($siteCount -gt 0) {
         Write-Verbose "User $($user.displayName) has access to $siteCount sites"
+        $totalaccessCount++
     } else {
         Write-Warning "User $($user.displayName) does not have access to any of the selected sites"
     }
+}
+
+if ($totalaccessCount -eq 0) {
+    Write-Error "No users have access to any of the selected sites. Exiting..."
+    pause
+    exit
 }
 
 # Get DriveList with proper structure for the folders form
@@ -797,7 +806,7 @@ $selectedFolders = Show-FolderSelectionForm -DriveList $driveList -AccessToken $
 
 # Display selected folders
 if (-not $selectedFolders -or $selectedFolders.Count -eq 0) {
-    Write-Host "No folders selected. Exiting..." -ForegroundColor Yellow
+    Write-Error "No folders selected. Exiting..." -ForegroundColor Yellow
     pause
     exit
 }
@@ -864,7 +873,7 @@ foreach ($folder in $selectedFolders) {
         $folder.eTag = $cleanETag
         $folder.eTagList = $documentsListId
     } catch {
-        Write-Host "Error: $($_.Exception.Message)" -ForegroundColor Red
+        Write-Error "Error: $($_.Exception.Message)"
         Write-Verbose "Failed to get eTag for folder: $($folder.FolderName)"
         Pause
         exit 1
@@ -934,7 +943,7 @@ $editedFolders = Show-FolderNameEditForm -SelectedFolders $selectedFolders -Verb
 
 # Check if user canceled the edit form
 if (-not $editedFolders -or $editedFolders.Count -eq 0) {
-    Write-Host "Folder editing was canceled. Exiting..." -ForegroundColor Yellow
+    Write-Error "Folder editing was canceled. Exiting..."
     pause
     exit
 }
@@ -979,17 +988,22 @@ Write-Host "Obtaining WebView2 cookies for Admin Center login..."
 try {
     $acCookie = Invoke-Expression -Command "pwsh.exe -ExecutionPolicy Bypass -File `"$workpath\Get-WebView2Cookies.ps1`""
     if ($LASTEXITCODE -ne 0) {
-        Write-Host "Error: Unable to get WebView2 cookies."
+        Write-Error "Error: Unable to get WebView2 cookies."
         pause
         exit 1
     }
     if (-not $acCookie) {
-        Write-Host "Error: No cookies found. Please ensure you are logged into the Admin Center."
+        Write-Error "Error: No cookies found. Please ensure you are logged into the Admin Center."
+        pause
+        exit 1
+    }
+    if ($acCookie -like "*Error:*") {
+        Write-Error "Error: $acCookie"
         pause
         exit 1
     }
 } catch {
-    Write-Host "Error: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Error "Error: $($_.Exception.Message)"
     pause
     exit 1
 }
@@ -1057,13 +1071,13 @@ foreach ($user in $users.list) {
             }
         }
     } catch {
-        Write-Host "Error: $($_.Exception.Message)" -ForegroundColor Red
-        Write-Host "Failed to get OneDrive access for user $($user.DisplayName)."
+        Write-Error "Error: $($_.Exception.Message)"
+        Write-Error "Failed to get OneDrive access for user $($user.DisplayName)."
         continue
     }
 
     if ($user.DriveAccess) {
-        Write-Host "User $($user.DisplayName) has OneDrive access." -ForegroundColor Green
+        Write-Host "Attempt to get access to the user's OneDrive for user $($user.DisplayName) was successful." -ForegroundColor Green
         if ($matchedFolders.Count -gt 0) {
             Write-Host "Adding folders to user $($user.DisplayName)'s OneDrive..." -ForegroundColor Green
             foreach ($folder in $matchedFolders) {
@@ -1075,7 +1089,7 @@ foreach ($user in $users.list) {
             Write-Host "No folders found for user $($user.DisplayName) in OneDrive." -ForegroundColor Yellow
         }
     } else {
-        Write-Host "Skipping User $($user.DisplayName) - Either no Onedrive access or no OneDrive found." -ForegroundColor Red
+        Write-Warning "Skipping User $($user.DisplayName) - Either no Onedrive access or no OneDrive found." -ForegroundColor Red
     }
 }
 

@@ -26,7 +26,7 @@ function Show-UserSelectionForm {
     $form.Text = "Select Users for Shortcut Creation"
     $form.Size = New-Object System.Drawing.Size(700, 530)
     $form.StartPosition = "CenterScreen"
-    $form.FormBorderStyle = [System.Windows.Forms.FormBorderStyle]::FixedDialog
+    $form.FormBorderStyle = [System.Windows.Forms.FormBorderStyle]::FixedSingle
     $form.MaximizeBox = $false
     $form.MinimizeBox = $false
     $form.TopMost = $true
@@ -437,7 +437,7 @@ function Show-SiteSelectionForm {
     $form.Text = "Select SharePoint Sites for Shortcut Creation"
     $form.Size = New-Object System.Drawing.Size(700, 520)
     $form.StartPosition = "CenterScreen"
-    $form.FormBorderStyle = [System.Windows.Forms.FormBorderStyle]::FixedDialog
+    $form.FormBorderStyle = [System.Windows.Forms.FormBorderStyle]::FixedSingle
     $form.MaximizeBox = $false
     $form.MinimizeBox = $false
     $form.TopMost = $true
@@ -909,7 +909,7 @@ function Show-FolderSelectionForm {
     $form.Text = "Select SharePoint Folders"
     $form.Size = New-Object System.Drawing.Size(800, 600)
     $form.StartPosition = "CenterScreen"
-    $form.FormBorderStyle = [System.Windows.Forms.FormBorderStyle]::FixedDialog
+    $form.FormBorderStyle = [System.Windows.Forms.FormBorderStyle]::FixedSingle
     $form.MaximizeBox = $false
     $form.MinimizeBox = $false
     $form.TopMost = $true
@@ -2012,7 +2012,7 @@ function Show-FolderNameEditForm {
     $form.Text = "Edit Folder Names"
     $form.Size = New-Object System.Drawing.Size(800, 550)
     $form.StartPosition = "CenterScreen"
-    $form.FormBorderStyle = [System.Windows.Forms.FormBorderStyle]::FixedDialog
+    $form.FormBorderStyle = [System.Windows.Forms.FormBorderStyle]::FixedSingle
     $form.MaximizeBox = $false
     $form.MinimizeBox = $false
     $form.TopMost = $true
