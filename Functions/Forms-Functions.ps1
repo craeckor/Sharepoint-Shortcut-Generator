@@ -1950,7 +1950,7 @@ function Show-FolderSelectionForm {
                 
                 # Get drive info
                 $drive = $DriveList | Where-Object { $_.id -eq $driveId } | Select-Object -First 1
-                
+
                 try {
                     # Get folder info - we need to make an API call for each selected folder
                     $folderUrl = "$graphEndpoint/drives/$driveId/items/$folderId"
@@ -1977,6 +1977,7 @@ function Show-FolderSelectionForm {
                     webId = $DriveList | Where-Object { $_.id -eq $driveId } | Select-Object -ExpandProperty webId
                     siteId = $DriveList | Where-Object { $_.id -eq $driveId } | Select-Object -ExpandProperty siteId
                     siteWebUrl = $DriveList | Where-Object { $_.id -eq $driveId } | Select-Object -ExpandProperty webUrl
+                    domainSiteId = $DriveList | Where-Object { $_.id -eq $driveId } | Select-Object -ExpandProperty domainSiteId
                 }
             }
         }
@@ -2146,6 +2147,7 @@ function Show-FolderNameEditForm {
     $eTagColumn = Add-Column -Name "eTag" -HeaderText "eTag" -FillWeight 1
     $eTagListColumn = Add-Column -Name "eTagList" -HeaderText "eTagList" -FillWeight 1
     $siteWebUrlColumn = Add-Column -Name "siteWebUrl" -HeaderText "siteWebUrl" -FillWeight 1
+    $domainSiteIdColumn = Add-Column -Name "domainSiteId" -HeaderText "domainSiteId" -FillWeight 1
 
     $dataGridView.Columns.Add($driveIdColumn) | Out-Null
     $dataGridView.Columns.Add($driveNameColumn) | Out-Null
@@ -2156,6 +2158,7 @@ function Show-FolderNameEditForm {
     $dataGridView.Columns.Add($eTagColumn) | Out-Null
     $dataGridView.Columns.Add($eTagListColumn) | Out-Null
     $dataGridView.Columns.Add($siteWebUrlColumn) | Out-Null
+    $dataGridView.Columns.Add($domainSiteIdColumn) | Out-Null
 
     # Hide the columns we don't need to display
     $dataGridView.Columns[4].Visible = $false
@@ -2167,6 +2170,7 @@ function Show-FolderNameEditForm {
     $dataGridView.Columns[10].Visible = $false
     $dataGridView.Columns[11].Visible = $false
     $dataGridView.Columns[12].Visible = $false
+    $dataGridView.Columns[13].Visible = $false
 
     # Style the header
     $dataGridView.ColumnHeadersDefaultCellStyle.Font = New-Object System.Drawing.Font("Arial", 9, [System.Drawing.FontStyle]::Bold)
@@ -2200,7 +2204,8 @@ function Show-FolderNameEditForm {
             $folder.webId,
             $folder.eTag,
             $folder.eTagList,
-            $folder.siteWebUrl
+            $folder.siteWebUrl,
+            $folder.domainSiteId
         ) | Out-Null
     }
 
@@ -2404,6 +2409,7 @@ function Show-FolderNameEditForm {
                     eTag = $folder.eTag
                     eTagList = $folder.eTagList
                     siteWebUrl = $folder.siteWebUrl
+                    domainSiteId = $folder.domainSiteId
                 }
             $editedFolders += $newFolder
             Write-Verbose "Added folder to result collection - DriveId: $($newFolder.DriveId), FolderId: $($newFolder.FolderId)"

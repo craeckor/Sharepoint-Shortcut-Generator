@@ -576,8 +576,19 @@ Write-Verbose "All users in tenant:`n$usersAllTable"
 Write-Host "Showing user selection form..."
 Write-Host "Please select the users you want to work with..."
 
-# Only call ONCE and assign result
-$selectedUsers = Show-UserSelectionForm -userList $allUsersObj.value -Verbose:$SetVerbose
+try {
+    # Only call ONCE and assign result
+    $selectedUsers = Show-UserSelectionForm -userList $allUsersObj.value -Verbose:$SetVerbose
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "Error: Unable to show user selection form."
+        pause
+        exit 1
+    }
+} catch {
+    Write-Error "Error: $($_.Exception.Message)"
+    pause
+    exit 1
+}
 
 if (-not $selectedUsers -or $selectedUsers.Count -eq 0) {
     Write-Error "No users selected. Exiting..."
@@ -626,7 +637,18 @@ Write-Verbose "All sites in tenant:`n$sitesAllTable"
 Write-Host "Showing site selection form..."
 Write-Host "Please select the sites you want to work with..."
 
-$selectedSites = Show-SiteSelectionForm -SiteList $allSitesObj.value -Verbose:$SetVerbose
+try {
+    $selectedSites = Show-SiteSelectionForm -SiteList $allSitesObj.value -Verbose:$SetVerbose
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "Error: Unable to show site selection form."
+        pause
+        exit 1
+    }
+} catch {
+    Write-Error "Error: $($_.Exception.Message)"
+    pause
+    exit 1
+}
 
 if (-not $selectedSites -or $selectedSites.Count -eq 0) {
     Write-Error "No sites selected. Exiting..."
@@ -745,6 +767,7 @@ $totalaccessCount = 0
 
 foreach ($user in $users.list) {
     $user | Add-Member -NotePropertyName "sites" -NotePropertyValue @{} -Force
+    $user | Add-Member -NotePropertyName "hasAccess" -NotePropertyValue $null -Force
     $userEmail = $user.Mail
     Write-Verbose "Looking for sites with access for user: $($user.displayName) ($userEmail)"
 
@@ -769,9 +792,11 @@ foreach ($user in $users.list) {
     # Show summary of sites for this user
     $siteCount = $user.sites.Count
     if ($siteCount -gt 0) {
+        $user.hasAccess = $true
         Write-Verbose "User $($user.displayName) has access to $siteCount sites"
         $totalaccessCount++
     } else {
+        $user.hasAccess = $false
         Write-Warning "User $($user.displayName) does not have access to any of the selected sites"
     }
 }
@@ -794,19 +819,30 @@ foreach ($site in $sites.list) {
             webUrl = $site.WebUrl
             domainId = $site.domainId
             webId = $site.webId
+            domainSiteId = $site.siteId
         }
     }
 }
 
 Write-Host "Getting folders for selected drives..."
 Write-Host "Please select the folders you want to work with..."
-
-# Show the folder selection form
-$selectedFolders = Show-FolderSelectionForm -DriveList $driveList -AccessToken $accessToken -Verbose:$SetVerbose
+try {
+    # Show the folder selection form
+    $selectedFolders = Show-FolderSelectionForm -DriveList $driveList -AccessToken $accessToken -Verbose:$SetVerbose
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "Error: Unable to get folders from Graph API."
+        pause
+        exit 1
+    }
+} catch {
+    Write-Error "Error: $($_.Exception.Message)"
+    pause
+    exit 1
+}
 
 # Display selected folders
 if (-not $selectedFolders -or $selectedFolders.Count -eq 0) {
-    Write-Error "No folders selected. Exiting..." -ForegroundColor Yellow
+    Write-Error "No folders selected. Exiting..."
     pause
     exit
 }
@@ -884,62 +920,78 @@ Write-Host "Associating folders with users..."
 
 # Associate selected folders with users
 foreach ($user in $users.list) {
-    $user | Add-Member -NotePropertyName "folders" -NotePropertyValue @() -Force
+    if (-not $user.hasAccess) {
+        Write-Warning "User $($user.displayName) does not have access to any sites. Skipping folder association."
+        continue
+    } else {
+        $user | Add-Member -NotePropertyName "folders" -NotePropertyValue @() -Force
 
-    # Print user information
-    $userInfo = $user.sites | Format-Table -Property * -AutoSize | Out-String
-    Write-Verbose "User: $($user.DisplayName) - Sites:`n$userInfo"
-    
-    # For each site the user has access to
-    foreach ($siteId in $user.sites.Keys) {
-        # Get the driveId for this site from the user's sites collection
-        $siteDriveId = $user.sites[$siteId].driveId
-
-        Write-Verbose "Processing site: $($user.sites[$siteId].siteName)"
-        Write-Verbose "Site DriveId: $siteDriveId"
+        # Print user information
+        $userInfo = $user.sites | Format-Table -Property * -AutoSize | Out-String
+        Write-Verbose "User: $($user.DisplayName) - Sites:`n$userInfo"
         
-        # Find matching folders for this site's drive ID
-        $matchedFolders = @()
-        foreach ($folder in $selectedFolders) {
-            $folderDriveId = $folder.DriveId.ToString().Trim()
-            $userSiteDriveId = $siteDriveId.ToString().Trim()
+        # For each site the user has access to
+        foreach ($siteId in $user.sites.Keys) {
+            # Get the driveId for this site from the user's sites collection
+            $siteDriveId = $user.sites[$siteId].driveId
+
+            Write-Verbose "Processing site: $($user.sites[$siteId].siteName)"
+            Write-Verbose "Site DriveId: $siteDriveId"
             
-            Write-Verbose "Comparing folder '$($folder.FolderName)': '$folderDriveId' with site drive: '$userSiteDriveId'"
+            # Find matching folders for this site's drive ID
+            $matchedFolders = @()
+            foreach ($folder in $selectedFolders) {
+                $folderDriveId = $folder.DriveId.ToString().Trim()
+                $userSiteDriveId = $siteDriveId.ToString().Trim()
+                
+                Write-Verbose "Comparing folder '$($folder.FolderName)': '$folderDriveId' with site drive: '$userSiteDriveId'"
+                
+                # If the drive IDs match, add this folder to the matched set
+                if ($folderDriveId -ieq $userSiteDriveId) {
+                    Write-Verbose "MATCH FOUND - Adding folder: $($folder.FolderName)"
+                    $matchedFolders += $folder
+                }
+            }
             
-            # If the drive IDs match, add this folder to the matched set
-            if ($folderDriveId -ieq $userSiteDriveId) {
-                Write-Verbose "MATCH FOUND - Adding folder: $($folder.FolderName)"
-                $matchedFolders += $folder
+            # Now add all matched folders to the user's folders collection
+            if ($matchedFolders.Count -gt 0) {
+                $user.folders += $matchedFolders
+                Write-Verbose "Added $($matchedFolders.Count) folders from site $($user.sites[$siteId].siteName) to user $($user.DisplayName)"
+                
+                foreach ($folder in $matchedFolders) {
+                    Write-Verbose "  - Added folder: $($folder.FolderName)"
+                }
+            } else {
+                Write-Verbose "No matching folders found for user $($user.DisplayName) in site $($user.sites[$siteId].siteName)"
             }
         }
         
-        # Now add all matched folders to the user's folders collection
-        if ($matchedFolders.Count -gt 0) {
-            $user.folders += $matchedFolders
-            Write-Verbose "Added $($matchedFolders.Count) folders from site $($user.sites[$siteId].siteName) to user $($user.DisplayName)"
-            
-            foreach ($folder in $matchedFolders) {
-                Write-Verbose "  - Added folder: $($folder.FolderName)"
-            }
-        } else {
-            Write-Verbose "No matching folders found for user $($user.DisplayName) in site $($user.sites[$siteId].siteName)"
-        }
-    }
-    
-    # Show summary for this user
-    Write-Verbose "Total folders for $($user.DisplayName): $(($user.folders | Measure-Object).Count)"
+        # Show summary for this user
+        Write-Verbose "Total folders for $($user.DisplayName): $(($user.folders | Measure-Object).Count)"
 
-    # Show all folders for each user
-    foreach ($folder in $user.folders) {
-        Write-Verbose "  - Folder: $($folder.FolderName) (DriveId: $($folder.DriveId), Path: $($folder.Path))"
+        # Show all folders for each user
+        foreach ($folder in $user.folders) {
+            Write-Verbose "  - Folder: $($folder.FolderName) (DriveId: $($folder.DriveId), Path: $($folder.Path))"
+        }
     }
 }
 
 Write-Host "Processing completed. Please review the selected folders and users."
 Write-Host "You can now edit the folder names for shortcut creation."
 
-# Show the folder name edit form
-$editedFolders = Show-FolderNameEditForm -SelectedFolders $selectedFolders -Verbose:$SetVerbose
+try {
+    # Show the folder name edit form
+    $editedFolders = Show-FolderNameEditForm -SelectedFolders $selectedFolders -Verbose:$SetVerbose
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "Error: Unable to show folder name edit form."
+        pause
+        exit 1
+    }
+} catch {
+    Write-Error "Error: $($_.Exception.Message)"
+    pause
+    exit 1
+}
 
 # Check if user canceled the edit form
 if (-not $editedFolders -or $editedFolders.Count -eq 0) {
@@ -960,6 +1012,7 @@ foreach ($folder in $editedFolders) {
     Write-Host "eTag: $($folder.eTag)" -ForegroundColor Green
     Write-Host "eTagList: $($folder.eTagList)" -ForegroundColor Green
     Write-Host "WebUrl: $($folder.webUrl)" -ForegroundColor Green
+    Write-Host "DomainSiteId: $($folder.DomainSiteId)" -ForegroundColor Green
     Write-Host "SiteId: $($folder.siteId)" -ForegroundColor Green
     Write-Host "SiteWebUrl: $($folder.siteWebUrl)" -ForegroundColor Green
     Write-Host ""
@@ -1014,82 +1067,85 @@ Write-Host "Processing OneDrive access for each user..."
 
 # Request Onedrive-Access for each user
 foreach ($user in $users.list) {
-    Write-Verbose "Processing user: $($user.DisplayName) ($($user.Mail))"
-    
-    $user | Add-Member -NotePropertyName "DriveAccess" -NotePropertyValue $null -Force
+    if (-not $user.hasAccess) {
+        Write-Warning "User $($user.displayName) does not have access to any sites. Skipping OneDrive access check and adding folders."
+        continue
+    } else {
+        Write-Verbose "Processing user: $($user.DisplayName) ($($user.Mail))"
+        
+        $user | Add-Member -NotePropertyName "DriveAccess" -NotePropertyValue $null -Force
 
-    # Try to get permissions for each user's OneDrive
-    try {
-        $userDrive = Send-GraphRequest -Method GET -Uri "https://admin.microsoft.com/admin/api/users/accessodb?upn=$($user.Mail)" -Cookie "$acCookie" -Verbose:$SetVerbose
-        if ($LASTEXITCODE -ne 0) {
-            Write-Error "Error: Unable to get OneDrive access for user $($user.DisplayName)."
-            Write-Verbose "Error details: $userDrive"
-            $user.DriveAccess = $false
-            continue
-        }
-
-        # Remove "" from the response
-        $userDrive = $userDrive -replace '"', ''
-
-        Write-Verbose "User's $($user.DisplayName) OneDrive access: $userDrive"
-
-        # Test access to the user's OneDrive
-        # Get OneDrive's drive ID
-        if ($null -eq $user.DriveAccess) {
-            $userDrive = Send-GraphRequest -Method GET -Uri "$(([uri]::new("$graphEndpoint/users/$($user.id)/drives?filter=name eq 'OneDrive'")).AbsoluteUri)" -AccessToken "$accessToken" -Verbose:$SetVerbose
+        # Try to get permissions for each user's OneDrive
+        try {
+            $userDrive = Send-GraphRequest -Method GET -Uri "https://admin.microsoft.com/admin/api/users/accessodb?upn=$($user.Mail)" -Cookie "$acCookie" -Verbose:$SetVerbose
             if ($LASTEXITCODE -ne 0) {
-                Write-Error "Error: Unable to get OneDrive for user $($user.DisplayName)."
+                Write-Error "Error: Unable to get OneDrive access for user $($user.DisplayName)."
                 Write-Verbose "Error details: $userDrive"
                 $user.DriveAccess = $false
                 continue
-            } else {
-                $userDriveObj = $userDrive | ConvertFrom-Json
-                $userDriveId = $userDriveObj.value | Where-Object {$_.name -eq "OneDrive"} | Select-Object -ExpandProperty id
             }
-        }
-        if (-not $userDriveId) {
-            Write-Warning "No 'OneDrive' found for user: $($user.displayName)"
-            $user.DriveAccess = $false
-            continue
-        } else {
-            Write-Verbose "User $($user.DisplayName) has OneDrive with ID: $userDriveId"
-            $user | Add-Member -NotePropertyName "OneDriveId" -NotePropertyValue $userDriveId -Force
-            $user.OneDriveId = $userDriveId
-        }
 
-        if ($null -eq $user.DriveAccess) {
-            $userDriveRoot = Send-GraphRequest -Method GET -Uri "$graphEndpoint/drives/$($user.OneDriveId)/root" -AccessToken "$accessToken" -Verbose:$SetVerbose
-            if ($LASTEXITCODE -ne 0) {
-                Write-Error "Error: Unable to get OneDrive root for user $($user.DisplayName)."
-                Write-Verbose "Error details: $userDriveRoot"
+            # Remove "" from the response
+            $userDrive = $userDrive -replace '"', ''
+
+            Write-Verbose "User's $($user.DisplayName) OneDrive access: $userDrive"
+
+            # Test access to the user's OneDrive
+            # Get OneDrive's drive ID
+            if ($null -eq $user.DriveAccess) {
+                $userDrive = Send-GraphRequest -Method GET -Uri "$(([uri]::new("$graphEndpoint/users/$($user.id)/drives?filter=name eq 'OneDrive'")).AbsoluteUri)" -AccessToken "$accessToken" -Verbose:$SetVerbose
+                if ($LASTEXITCODE -ne 0) {
+                    Write-Error "Error: Unable to get OneDrive for user $($user.DisplayName)."
+                    Write-Verbose "Error details: $userDrive"
+                    $user.DriveAccess = $false
+                    continue
+                } else {
+                    $userDriveObj = $userDrive | ConvertFrom-Json
+                    $userDriveId = $userDriveObj.value | Where-Object {$_.name -eq "OneDrive"} | Select-Object -ExpandProperty id
+                }
+            }
+            if (-not $userDriveId) {
+                Write-Warning "No 'OneDrive' found for user: $($user.displayName)"
                 $user.DriveAccess = $false
                 continue
             } else {
-                $userDriveRootObj = $userDriveRoot | ConvertFrom-Json
-                Write-Verbose "User $($user.DisplayName) OneDrive root: $($userDriveRootObj.webUrl)"
-                $user.DriveAccess = $true
+                Write-Verbose "User $($user.DisplayName) has OneDrive with ID: $userDriveId"
+                $user | Add-Member -NotePropertyName "OneDriveId" -NotePropertyValue $userDriveId -Force
+                $user.OneDriveId = $userDriveId
             }
+
+            if ($null -eq $user.DriveAccess) {
+                $userDriveRoot = Send-GraphRequest -Method GET -Uri "$graphEndpoint/drives/$($user.OneDriveId)/root" -AccessToken "$accessToken" -Verbose:$SetVerbose
+                if ($LASTEXITCODE -ne 0) {
+                    Write-Error "Error: Unable to get OneDrive root for user $($user.DisplayName)."
+                    Write-Verbose "Error details: $userDriveRoot"
+                    $user.DriveAccess = $false
+                    continue
+                } else {
+                    $userDriveRootObj = $userDriveRoot | ConvertFrom-Json
+                    Write-Verbose "User $($user.DisplayName) OneDrive root: $($userDriveRootObj.webUrl)"
+                    $user.DriveAccess = $true
+                }
+            }
+        } catch {
+            Write-Error "Error: $($_.Exception.Message)"
+            Write-Error "Failed to get OneDrive access for user $($user.DisplayName)."
+            continue
         }
-    } catch {
-        Write-Error "Error: $($_.Exception.Message)"
-        Write-Error "Failed to get OneDrive access for user $($user.DisplayName)."
-        continue
-    }
 
-    if ($user.DriveAccess) {
-        Write-Host "Attempt to get access to the user's OneDrive for user $($user.DisplayName) was successful." -ForegroundColor Green
-        if ($matchedFolders.Count -gt 0) {
-            Write-Host "Adding folders to user $($user.DisplayName)'s OneDrive..." -ForegroundColor Green
-            foreach ($folder in $matchedFolders) {
-                Write-Host "  - Adding folder: $($folder.FolderName) to OneDrive" -ForegroundColor Green
-                
-
+        if ($user.DriveAccess) {
+            Write-Host "Attempt to get access to the user's OneDrive for user $($user.DisplayName) was successful." -ForegroundColor Green
+            if ($matchedFolders.Count -gt 0) {
+                Write-Host "Adding folders to user $($user.DisplayName)'s OneDrive..." -ForegroundColor Green
+                foreach ($folder in $matchedFolders) {
+                    Write-Host "  - Adding folder: $($folder.FolderName) to OneDrive" -ForegroundColor Green
+                }
+            } else {
+                Write-Host "No folders found for user $($user.DisplayName) in OneDrive." -ForegroundColor Yellow
             }
         } else {
-            Write-Host "No folders found for user $($user.DisplayName) in OneDrive." -ForegroundColor Yellow
+            Write-Warning "Skipping User $($user.DisplayName) - Either no Onedrive access or no OneDrive found." -ForegroundColor Red
         }
-    } else {
-        Write-Warning "Skipping User $($user.DisplayName) - Either no Onedrive access or no OneDrive found." -ForegroundColor Red
     }
 }
 
