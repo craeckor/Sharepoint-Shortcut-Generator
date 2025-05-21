@@ -95,7 +95,7 @@ if ($result -ne [System.Windows.Forms.DialogResult]::OK) {
 
 try {
     $response = Invoke-WebView2 -uri "$url" -UrlCloseConditionRegex "$quiturl" -title "Microsoft Login - Microsoft Admincenter"
-    if ($response -eq $null) {
+    if ($null -eq $response) {
         return "Error: No response from WebView2"
     }
     if ($response -notlike "*https://admin.microsoft.com*") {

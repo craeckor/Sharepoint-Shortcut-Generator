@@ -2251,7 +2251,7 @@ function Show-FolderNameEditForm {
     $form.Controls.Add($bottomPanel)
 
     # Function to apply site name prefixes to all display names
-    function Apply-SitePrefixes {
+    function Set-SitePrefixes {
         $dataGridView.SuspendLayout()
         
         # Apply site name prefix to all display names
@@ -2291,7 +2291,7 @@ function Show-FolderNameEditForm {
     # Handle checkbox state change
     $prefixCheckbox.Add_CheckedChanged({
         if ($prefixCheckbox.Checked) {
-            Apply-SitePrefixes
+            Set-SitePrefixes
         } else {
             Remove-SitePrefixes
         }
@@ -2300,7 +2300,7 @@ function Show-FolderNameEditForm {
     # Apply site prefixes by default when form loads
     $form.add_Shown({
         if ($prefixCheckbox.Checked) {
-            Apply-SitePrefixes
+            Set-SitePrefixes
         }
     })
 
@@ -2318,7 +2318,7 @@ function Show-FolderNameEditForm {
 
         # Re-apply prefixes if checkbox is checked
         if ($prefixCheckbox.Checked) {
-            Apply-SitePrefixes
+            Set-SitePrefixes
         }
     })
 
