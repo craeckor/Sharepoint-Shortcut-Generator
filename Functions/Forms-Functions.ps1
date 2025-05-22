@@ -10,7 +10,7 @@ function Show-UserSelectionForm {
     try {
         $Micon = [System.Drawing.Icon]::ExtractAssociatedIcon("$workpath\images\icons\Microsoft_logo.ico")
     } catch {
-        Write-Verbose "Unable to load icon: $_"
+        Write-Warning "Unable to load icon: $_"
     }
     
     # Add isExternal property to users
@@ -91,7 +91,7 @@ function Show-UserSelectionForm {
     $searchIconBox.Image = $searchIcon.ToBitmap()
     $searchPanel.Controls.Add($searchIconBox)
     } catch {
-    Write-Verbose "Unable to load search icon: $_"
+    Write-Warning "Unable to load search icon: $_"
     # If icon fails to load, don't add anything to maintain clean layout
     }
 
@@ -430,7 +430,7 @@ function Show-SiteSelectionForm {
     try {
         $Micon = [System.Drawing.Icon]::ExtractAssociatedIcon("$workpath\images\icons\Microsoft_logo.ico")
     } catch {
-        Write-Verbose "Unable to load icon: $_"
+        Write-Warning "Unable to load icon: $_"
     }
     
     $form = New-Object System.Windows.Forms.Form
@@ -502,7 +502,7 @@ function Show-SiteSelectionForm {
         $searchIconBox.Image = $searchIcon.ToBitmap()
         $searchPanel.Controls.Add($searchIconBox)
     } catch {
-        Write-Verbose "Unable to load search icon: $_"
+        Write-Warning "Unable to load search icon: $_"
         # If icon fails to load, don't add anything to maintain clean layout
     }
 
@@ -894,7 +894,7 @@ function Show-FolderSelectionForm {
     try {
         $Micon = [System.Drawing.Icon]::ExtractAssociatedIcon("$workpath\images\icons\Microsoft_logo.ico")
     } catch {
-        Write-Verbose "Unable to load icon: $_"
+        Write-Warning "Unable to load icon: $_"
     }
 
     # Try to load folder icon
@@ -902,7 +902,7 @@ function Show-FolderSelectionForm {
     try {
         $folderIcon = [System.Drawing.Icon]::ExtractAssociatedIcon("$workpath\images\icons\Folder_icon.ico")
     } catch {
-        Write-Verbose "Unable to load folder icon: $_"
+        Write-Warning "Unable to load folder icon: $_"
     }
     
     $form = New-Object System.Windows.Forms.Form
@@ -1075,7 +1075,7 @@ function Show-FolderSelectionForm {
         $searchIconBox.Image = $searchIcon.ToBitmap()
         $searchPanel.Controls.Add($searchIconBox)
     } catch {
-        Write-Verbose "Unable to load search icon: $_"
+        Write-Warning "Unable to load search icon: $_"
         # If icon fails to load, don't add anything to maintain clean layout
     }
 
@@ -1440,7 +1440,7 @@ function Show-FolderSelectionForm {
                             }
                         } catch {
                             # If we can't parse the path, just use what we know
-                            Write-Verbose "Could not parse parent path: $_"
+                            Write-Warning "Could not parse parent path: $_"
                         }
                     }
                     
@@ -2016,7 +2016,7 @@ function Show-FolderNameEditForm {
     try {
         $Micon = [System.Drawing.Icon]::ExtractAssociatedIcon("$workpath\images\icons\Microsoft_logo.ico")
     } catch {
-        Write-Verbose "Unable to load icon: $_"
+        Write-Warning "Unable to load icon: $_"
     }
     
     # Try to load folder icon
@@ -2024,7 +2024,7 @@ function Show-FolderNameEditForm {
     try {
         $folderIcon = [System.Drawing.Icon]::ExtractAssociatedIcon("$workpath\images\icons\Folder_icon.ico")
     } catch {
-        Write-Verbose "Unable to load folder icon: $_"
+        Write-Warning "Unable to load folder icon: $_"
     }
     
     $form = New-Object System.Windows.Forms.Form
@@ -2437,7 +2437,7 @@ function Show-FolderNameEditForm {
         Write-Verbose "Created $($editedFolders.Count) result objects"
     }
     else {
-        Write-Verbose "User canceled the operation, returning empty collection"
+        Write-Error "User canceled the operation, returning empty collection"
     }
 
     Write-Verbose "Returning result collection with $($editedFolders.Count) items"

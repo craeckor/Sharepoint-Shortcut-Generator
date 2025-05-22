@@ -222,6 +222,7 @@ if ($InstalledProgs -like "*PowerShell*7*") {
     $currentPath = $PSScriptRoot
     $downloadPath = "$workpath\powershell-7.msi"
     $curlpath = "$currentPath\curl\curl.exe"
+    $curldefault = "--connect-timeout 45 --retry 5 --retry-max-time 120 --retry-connrefused -S -s"
     
     if (Test-Path $workpath) {
         Write-Host "Directory $workpath already exists. Deleting..."
@@ -235,17 +236,29 @@ if ($InstalledProgs -like "*PowerShell*7*") {
     Write-Host "Installing PowerShell 7..."
     Write-Host "Please wait..."
     Write-Verbose "Extracting URL from aka.ms link..."
-    $redirecturl1 = (Invoke-Expression -Command "$curlpath --connect-timeout 45 --retry 5 --retry-max-time 120 --retry-connrefused -S -s -v `"$url`" 2>&1" | Select-String -Pattern "Location: ").Line -replace "< Location: \s*", ""
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "Error: Unable to extract URL from aka.ms link."
+    try {
+        $redirecturl1 = (Invoke-Expression -Command "$curlpath $curldefault -v `"$url`" 2>&1" | Select-String -Pattern "Location: ").Line -replace "< Location: \s*", ""
+        if ($LASTEXITCODE -ne 0) {
+            Write-Error "Error: Unable to extract URL from aka.ms link."
+            pause
+            exit 1
+        }
+    } catch {
+        Write-Error "Error: $($_.Exception.Message)"
         pause
         exit 1
     }
     Write-Verbose "Found redirect URL: $redirecturl1"
     Write-Verbose "Extracting final download URL..."
-    $redirecturl2 = (Invoke-Expression -Command "$curlpath --connect-timeout 45 --retry 5 --retry-max-time 120 --retry-connrefused -S -s -v `"$redirecturl1`" 2>&1" | Select-String -Pattern "Location: ").Line -replace "< Location: \s*", ""
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "Error: Unable to extract final download URL."
+    try {
+        $redirecturl2 = (Invoke-Expression -Command "$curlpath $curldefault -v `"$redirecturl1`" 2>&1" | Select-String -Pattern "Location: ").Line -replace "< Location: \s*", ""
+        if ($LASTEXITCODE -ne 0) {
+            Write-Error "Error: Unable to extract final download URL."
+            pause
+            exit 1
+        }
+    } catch {
+        Write-Error "Error: $($_.Exception.Message)"
         pause
         exit 1
     }
@@ -255,19 +268,31 @@ if ($InstalledProgs -like "*PowerShell*7*") {
     $version = $versionv -replace "v\s*", ""
     Write-Verbose "Found version number: $versionv"
     Write-Host "Downloading PowerShell 7 version $version..."
-    Invoke-Expression -Command "$curlpath --connect-timeout 45 --retry 5 --retry-max-time 120 --retry-connrefused -S -s -L -o $downloadPath `"https://github.com/PowerShell/PowerShell/releases/download/$versionv/PowerShell-$version-win-x64.msi`""
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "Error: Unable to download PowerShell 7 installer."
+    try {
+        Invoke-Expression -Command "$curlpath $curldefault -L -o $downloadPath `"https://github.com/PowerShell/PowerShell/releases/download/$versionv/PowerShell-$version-win-x64.msi`""
+        if ($LASTEXITCODE -ne 0) {
+            Write-Error "Error: Unable to download PowerShell 7 installer."
+            pause
+            exit 1
+        }
+    } catch {
+        Write-Error "Error: $($_.Exception.Message)"
         pause
         exit 1
     }
     Write-Host "Download complete."
     Write-Host "Installing PowerShell 7..."
-    Start-Process -FilePath msiexec.exe -ArgumentList "/i $downloadPath /passive /norestart" -Wait
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "Error: Unable to install PowerShell 7."
-        Write-Debug "Cleaning up temporary files..."
-        Remove-Item -Path $workpath -Recurse -Force
+    try {
+        Start-Process -FilePath msiexec.exe -ArgumentList "/i $downloadPath /passive /norestart" -Wait
+        if ($LASTEXITCODE -ne 0) {
+            Write-Verbose "Cleaning up temporary files..."
+            Remove-Item -Path $workpath -Recurse -Force
+            Write-Error "Error: Unable to install PowerShell 7."
+            pause
+            exit 1
+        }
+    } catch {
+        Write-Error "Error: $($_.Exception.Message)"
         pause
         exit 1
     }
@@ -289,6 +314,7 @@ if ($webview2Needed) {
     $currentPath = $PSScriptRoot
     $downloadPath = "$workpath\MicrosoftEdgeWebview2Setup.exe"
     $curlpath = "$currentPath\curl\curl.exe"
+    $curldefault = "--connect-timeout 45 --retry 5 --retry-max-time 120 --retry-connrefused -S -s"
     
     if (Test-Path $workpath) {
         Write-Host "Directory $workpath already exists. Deleting..."
@@ -302,17 +328,29 @@ if ($webview2Needed) {
     Write-Host "Installing WebView2 Runtime..."
     Write-Host "Please wait..."
     Write-Verbose "Extracting URL from go.microsoft.com link..."
-    $downloadURL = (Invoke-Expression -Command "$curlpath --connect-timeout 45 --retry 5 --retry-max-time 120 --retry-connrefused -S -s -v `"$url`" 2>&1" | Select-String -Pattern "Location: ").Line -replace "< Location: \s*", ""
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "Error: Unable to extract URL from go.microsoft.com link."
+    try {
+        $downloadURL = (Invoke-Expression -Command "$curlpath $curldefault -v `"$url`" 2>&1" | Select-String -Pattern "Location: ").Line -replace "< Location: \s*", ""
+        if ($LASTEXITCODE -ne 0) {
+            Write-Error "Error: Unable to extract URL from go.microsoft.com link."
+            pause
+            exit 1
+        }
+    } catch {
+        Write-Error "Error: $($_.Exception.Message)"
         pause
         exit 1
     }
     Write-Verbose "Found redirect URL: $downloadURL"
     Write-Host "Downloading WebView2 Runtime..."
-    Invoke-Expression -Command "$curlpath --connect-timeout 45 --retry 5 --retry-max-time 120 --retry-connrefused -S -s -L -o $downloadPath `"$downloadURL`""
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "Error: Unable to download WebView2 Runtime installer."
+    try {
+        Invoke-Expression -Command "$curlpath $curldefault -L -o $downloadPath `"$downloadURL`""
+        if ($LASTEXITCODE -ne 0) {
+            Write-Error "Error: Unable to download WebView2 Runtime installer."
+            pause
+            exit 1
+        }
+    } catch {
+        Write-Error "Error: $($_.Exception.Message)"
         pause
         exit 1
     }
@@ -320,9 +358,9 @@ if ($webview2Needed) {
     Write-Host "Installing WebView2 Runtime..."
     Start-Process -FilePath $downloadPath -ArgumentList "/silent /install" -Wait
     if ($LASTEXITCODE -ne 0) {
-        Write-Host "Error: Unable to install WebView2 Runtime."
-        Write-Debug "Cleaning up temporary files..."
+        Write-Verbose "Cleaning up temporary files..."
         Remove-Item -Path $workpath -Recurse -Force
+        Write-Error "Error: Unable to install WebView2 Runtime."
         pause
         exit 1
     }
