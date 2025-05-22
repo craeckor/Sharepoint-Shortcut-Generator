@@ -447,7 +447,6 @@ function Get-OAuth2Token {
         }
         
         Write-Verbose "Access token successfully obtained"
-        Write-Verbose "Access token: $($token.access_token)"
         
         # Return a custom object with token information and expiration details
         $tokenExpiresAt = (Get-Date).AddSeconds($token.expires_in)
@@ -774,7 +773,7 @@ $users.list = $selectedUsers
 Write-Verbose "Users object: $($users | ConvertTo-Json -Depth 10 -Compress)"
 Write-Verbose "Selected users count: $($users.list.Count)"
 # Format as string first, then output with Write-Verbose
-$usersTable = ($users.list | Format-Table -AutoSize | Out-String).Trim()
+$usersTable = ($users.list | Select-Object DisplayName, Mail, Id | Format-Table -AutoSize | Out-String).Trim()
 Write-Verbose "Selected users:`n$usersTable"
 
 Write-Host "Getting all sites in tenant..."
@@ -803,7 +802,7 @@ foreach ($site in $allSitesObj.value) {
     }
 }
 
-$sitesAllTable = ($allSitesObj.value | Select-Object DisplayName, WebUrl, domainId, siteId, webId | Format-Table -AutoSize | Out-String).Trim()
+$sitesAllTable = ($allSitesObj.value | Select-Object DisplayName, WebUrl | Format-Table -AutoSize | Out-String).Trim()
 Write-Verbose "All sites in tenant:`n$sitesAllTable"
 
 Write-Host "Showing site selection form..."
@@ -925,7 +924,7 @@ foreach ($site in $sites.list) {
     # Display first 5 items with their key properties
     Write-Verbose "Fields for first 5 users in site '$($site.displayName)':"
     $fieldsTable = ($fieldsOnly | Select-Object | 
-        Select-Object EMail, Title, Name, FirstName, LastName, ContentType, Created, Modified -First 5 |
+        Select-Object EMail, Name, FirstName, LastName -First 5 |
         Format-Table -AutoSize | Out-String).Trim()
     Write-Verbose $fieldsTable
     
@@ -1122,7 +1121,7 @@ foreach ($user in $users.list) {
         $user | Add-Member -NotePropertyName "folders" -NotePropertyValue @() -Force
 
         # Print user information
-        $userInfo = $user.sites | Format-Table -Property * -AutoSize | Out-String
+        $userInfo = $user.sites | Select-Object siteName | Format-Table -AutoSize | Out-String
         Write-Verbose "User: $($user.DisplayName) - Sites:`n$userInfo"
         
         # For each site the user has access to
@@ -1226,7 +1225,7 @@ try {
     exit 1
 }
 
-Write-Verbose "Cookie: $acCookie"
+Write-Verbose "WebView2 cookies obtained successfully."
 
 Write-Host "Processing OneDrive access for each user..."
 
@@ -1339,6 +1338,11 @@ foreach ($user in $users.list) {
                             }
                             elseif ($responseObj.error.innerError.code -eq "nestedAscendantShortcutExists") {
                                 Write-Warning "A parent shortcut already exists that includes $($folder.FolderName) - Creation not possible - Skipping"
+                                Write-Warning "Manaully remove the parent shortcut to create this folder."
+                            }
+                            elseif ($responseObj.error.innerError.code -eq "nestedDescendantShortcutExists") {
+                                Write-Warning "A child shortcut already exists that includes $($folder.FolderName) - Creation not possible - Skipping"
+                                Write-Warning "Manaully remove the child shortcut to create this folder."
                             }
                             else {
                                 Write-Error "Error: $($responseObj.error.message)"
