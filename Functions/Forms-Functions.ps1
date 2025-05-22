@@ -1032,16 +1032,34 @@ function Show-FolderSelectionForm {
     $pathLabel.Size = New-Object System.Drawing.Size(650, 24)
     $pathLabel.Location = New-Object System.Drawing.Point(100, 3)
     $pathLabel.TextAlign = [System.Drawing.ContentAlignment]::MiddleLeft
-    $pathLabel.Text = "/ (Root)"
+    $pathLabel.Text = "/ (Documents - Root)"
     $pathLabel.Font = New-Object System.Drawing.Font("Arial", 9)
     $pathPanel.Controls.Add($pathLabel)
 
     $form.Controls.Add($pathPanel)
 
+    # Create a warning panel for subfolder and root folder limitations
+    $warningPanel = New-Object System.Windows.Forms.Panel
+    $warningPanel.Size = New-Object System.Drawing.Size(760, 40)
+    $warningPanel.Location = New-Object System.Drawing.Point(10, 100) # Position below path panel
+    $warningPanel.BackColor = [System.Drawing.Color]::FromArgb(255, 240, 240)
+    $warningPanel.BorderStyle = [System.Windows.Forms.BorderStyle]::FixedSingle
+
+    $warningLabel = New-Object System.Windows.Forms.Label
+    $warningLabel.Size = New-Object System.Drawing.Size(740, 35)
+    $warningLabel.Location = New-Object System.Drawing.Point(10, 2)
+    $warningLabel.Text = "WARNING: Adding subfolders of a selected folder will not work and will fail. The same applies to the root folder. Please select only individual folders."
+    $warningLabel.TextAlign = [System.Drawing.ContentAlignment]::MiddleLeft
+    $warningLabel.Font = New-Object System.Drawing.Font("Arial", 9, [System.Drawing.FontStyle]::Bold)
+    $warningLabel.ForeColor = [System.Drawing.Color]::FromArgb(180, 0, 0)
+    $warningPanel.Controls.Add($warningLabel)
+
+    $form.Controls.Add($warningPanel)
+
     # Add search panel to folder selection form, after the path panel
     $searchPanel = New-Object System.Windows.Forms.Panel
     $searchPanel.Size = New-Object System.Drawing.Size(760, 40)
-    $searchPanel.Location = New-Object System.Drawing.Point(10, 100) # Position below path panel
+    $searchPanel.Location = New-Object System.Drawing.Point(10, 150) # Position below path panel
     $searchPanel.BackColor = [System.Drawing.Color]::White
     $searchPanel.BorderStyle = [System.Windows.Forms.BorderStyle]::FixedSingle
 
@@ -1171,8 +1189,8 @@ function Show-FolderSelectionForm {
 
     # Create the DataGridView
     $dataGridView = New-Object System.Windows.Forms.DataGridView
-    $dataGridView.Size = New-Object System.Drawing.Size(760, 350)
-    $dataGridView.Location = New-Object System.Drawing.Point(10, 150)
+    $dataGridView.Size = New-Object System.Drawing.Size(760, 300)
+    $dataGridView.Location = New-Object System.Drawing.Point(10, 200)
     $dataGridView.AllowUserToAddRows = $false
     $dataGridView.AllowUserToDeleteRows = $false
     $dataGridView.SelectionMode = 'FullRowSelect'
@@ -1389,7 +1407,7 @@ function Show-FolderSelectionForm {
                 })
                 
                 # Set the path label
-                $pathLabel.Text = "/ (Root)"
+                $pathLabel.Text = "/ (Documents - Root)"
                 
                 # Load children of root
                 $childrenUrl = "$graphEndpoint/drives/$DriveId/items/$($rootObject.id)/children"
@@ -1971,7 +1989,7 @@ function Show-FolderSelectionForm {
                     DriveName = if ($drive.name) { $drive.name } else { "Documents" }
                     SiteDisplayName = if ($drive.siteDisplayName) { $drive.siteDisplayName } else { "SharePoint" }
                     FolderId = $folderId
-                    FolderName = $folder.name
+                    FolderName = if ($folder.parentReference.path) { $folder.name } else { "Documents" }
                     WebUrl = $folder.webUrl
                     Path = if ($folder.parentReference.path) { $folder.parentReference.path } else { "/" }
                     webId = $DriveList | Where-Object { $_.id -eq $driveId } | Select-Object -ExpandProperty webId

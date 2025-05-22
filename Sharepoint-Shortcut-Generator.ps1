@@ -75,6 +75,99 @@ function Restart-Yourself  {
 
 Restart-AsAdmin
 
+# Enforce TLS 1.2
+# Function to configure and check the status of a TLS protocol
+function Set-TLSStatus {
+    param (
+        [string]$Protocol,
+        [string]$Type,
+        [int]$EnableValue = 1
+    )
+
+    $regPath = "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\$Protocol\$Type"
+
+    if (-not (Test-Path $regPath)) {
+        New-Item -Path $regPath -Force | Out-Null
+    }
+
+    Set-ItemProperty -Path $regPath -Name "Enabled" -Value $EnableValue -Force
+    Set-ItemProperty -Path $regPath -Name "DisabledByDefault" -Value 0 -Force
+}
+
+# Function to check the status of a TLS protocol
+function Get-TLSStatus {
+    param (
+        [string]$Protocol,
+        [string]$Type
+    )
+
+    $regPath = "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\$Protocol\$Type"
+
+    if (Test-Path $regPath) {
+        $enabled = Get-ItemProperty -Path $regPath -Name "Enabled" -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Enabled -ErrorAction SilentlyContinue
+        $disabledByDefault = Get-ItemProperty -Path $regPath -Name "DisabledByDefault" -ErrorAction SilentlyContinue | Select-Object -ExpandProperty DisabledByDefault -ErrorAction SilentlyContinue
+
+        if ($enabled -eq 1) {
+            "$Protocol $Type is Enabled"
+        } elseif ($disabledByDefault -eq 1) {
+            "$Protocol $Type is Disabled"
+        } else {
+            "$Protocol $Type is Not Configured"
+        }
+    } else {
+        "$Protocol $Type key does not exist"
+    }
+}
+
+# TLS versions to configure and check
+$tlsProtocols = @("TLS 1.0", "TLS 1.1", "TLS 1.2", "TLS 1.3")
+
+# Configure TLS 1.2 and TLS 1.3
+foreach ($protocol in $tlsProtocols) {
+    if ($protocol -eq "TLS 1.2" -or $protocol -eq "TLS 1.3") {
+        Set-TLSStatus -Protocol $protocol -Type 'Client' -EnableValue 1
+        Set-TLSStatus -Protocol $protocol -Type 'Server' -EnableValue 1
+    } elseif ($protocol -eq "TLS 1.0" -or $protocol -eq "TLS 1.1") {
+        Set-TLSStatus -Protocol $protocol -Type 'Client' -EnableValue 0
+        Set-TLSStatus -Protocol $protocol -Type 'Server' -EnableValue 0
+    }
+}
+
+# Check the status for each protocol and type (Client and Server)
+foreach ($protocol in $tlsProtocols) {
+    Write-Output "$(Get-TLSStatus -Protocol $protocol -Type 'Client')"
+    Write-Output "$(Get-TLSStatus -Protocol $protocol -Type 'Server')"
+}
+
+# .NET Framework strong cryptography setting
+function Get-DotNetCryptoStatus {
+    param (
+        [string]$regPath
+    )
+
+    $strongCrypto = Get-ItemProperty -Path $regPath -Name "SchUseStrongCrypto" -ErrorAction SilentlyContinue | Select-Object -ExpandProperty SchUseStrongCrypto -ErrorAction SilentlyContinue
+    if ($null -ne $strongCrypto) {
+        if ($strongCrypto -eq 1) {
+            ".NET Framework Strong Crypto at $regPath is Enabled"
+        } else {
+            ".NET Framework Strong Crypto at $regPath is Disabled"
+        }
+    } else {
+        ".NET Framework Strong Crypto at $regPath is Not Configured"
+    }
+}
+
+# Check .NET Framework strong cryptography settings
+$netFrameworkPaths = @(
+    "HKLM:\SOFTWARE\Microsoft\.NETFramework\v4.0.30319",
+    "HKLM:\SOFTWARE\Wow6432Node\Microsoft\.NETFramework\v4.0.30319"
+)
+
+foreach ($path in $netFrameworkPaths) {
+    Write-Output "$(Get-DotNetCryptoStatus -regPath $path)"
+}
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
 $MyProgs = Get-ItemProperty 'HKLM:SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*'; $MyProgs += Get-ItemProperty 'HKLM:SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*'
 $InstalledProgs = $MyProgs.DisplayName | Sort-Object -Unique
 
@@ -386,42 +479,83 @@ function Send-GraphRequest {
                 Write-Verbose "Making request #$currentRequestId to: $Uri"
             }
 
-            # Build basic curl cmd
-            $curlCmd = "$curlpath --connect-timeout 45 --retry 5 --retry-max-time 120 --retry-connrefused -o - -S -s -w '%{http_code}' -X $Method"
+            # For POST and PATCH methods, use Invoke-RestMethod if no cookie is needed
+            if (($Method -eq "POST" -or $Method -eq "PATCH") -and -not $Cookie) {
+                $headers = @{
+                    "Content-Type" = "application/json"
+                    "Accept" = "application/json"
+                }
 
-            # Add Authorization header if AccessToken is provided
-            if ($AccessToken) {
-                $curlCmd += " -H `"Authorization: Bearer $AccessToken`""
+                # Add Authorization header if AccessToken is provided
+                if ($AccessToken) {
+                    $headers["Authorization"] = "Bearer $AccessToken"
+                }
+
+                $params = @{
+                    Method = $Method
+                    Uri = $Uri
+                    Headers = $headers
+                    ContentType = "application/json"
+                }
+
+                # Add Body if provided
+                if ($Body) {
+                    $params.Body = $Body
+                }
+
+                try {
+                    $response = Invoke-RestMethod @params -ErrorAction Stop
+
+                    # Simulate success since Invoke-RestMethod throws on non-success codes
+                    $httpCode = "200"
+                    # Convert response to JSON string to maintain consistency with curl responses
+                    $responseBody = $response | ConvertTo-Json -Depth 10
+                } 
+                catch [System.Net.WebException] {
+                    $responseStream = $_.Exception.Response.GetResponseStream()
+                    $reader = New-Object System.IO.StreamReader($responseStream)
+                    $responseBody = $reader.ReadToEnd()
+                    $httpCode = [int]$_.Exception.Response.StatusCode
+                }
+            } else {
+                # Use curl for GET requests or when cookies are needed
+                # Build basic curl cmd
+                $curlCmd = "$curlpath --connect-timeout 45 --retry 5 --retry-max-time 120 --retry-connrefused -o - -S -s -w '%{http_code}' -X $Method"
+
+                # Add Authorization header if AccessToken is provided
+                if ($AccessToken) {
+                    $curlCmd += " -H `"Authorization: Bearer $AccessToken`""
+                }
+
+                # Add Body if provided
+                if ($Body) {
+                    $curlCmd += " -d `"$Body`""
+                }
+
+                # Add Cookie if provided
+                if ($Cookie) {
+                    $curlCmd += " -b `"$Cookie`""
+                }
+
+                # Add standard headers
+                $curlCmd += " -H `"Content-Type: application/json`" -H `"Accept: application/json`""
+
+                # Add the URI
+                $curlCmd += " `"$Uri`""
+                
+                $rawResponse = Invoke-Expression -Command "$curlCmd"
+                
+                if ($LASTEXITCODE -ne 0) {
+                    Write-Verbose "Curl command failed with exit code $LASTEXITCODE"
+                    throw "Curl command failed with exit code $LASTEXITCODE"
+                }
+                
+                # Extract the HTTP status code (last 3 characters)
+                $httpCode = $rawResponse.Substring($rawResponse.Length - 3)
+                
+                # Extract the actual response body (everything except the last 3 characters)
+                $responseBody = $rawResponse.Substring(0, $rawResponse.Length - 3)
             }
-
-            # Add Body if provided
-            if ($Body) {
-                $curlCmd += " -d `"$Body`""
-            }
-
-            # Add Cookie if provided
-            if ($Cookie) {
-                $curlCmd += " -b `"$Cookie`""
-            }
-
-            # Add standard headers
-            $curlCmd += " -H `"Content-Type: application/json`" -H `"Accept: application/json`""
-
-            # Add the URI
-            $curlCmd += " `"$Uri`""
-            
-            $rawResponse = Invoke-Expression -Command "$curlCmd"
-            
-            if ($LASTEXITCODE -ne 0) {
-                Write-Verbose "Curl command failed with exit code $LASTEXITCODE"
-                throw "Curl command failed with exit code $LASTEXITCODE"
-            }
-            
-            # Extract the HTTP status code (last 3 characters)
-            $httpCode = $rawResponse.Substring($rawResponse.Length - 3)
-            
-            # Extract the actual response body (everything except the last 3 characters)
-            $responseBody = $rawResponse.Substring(0, $rawResponse.Length - 3)
             
             # Check if HTTP status code is 403 - try refreshing token once
             if ($httpCode -eq "403" -and -not $tokenRefreshed -and -not $Cookie) {
@@ -599,7 +733,7 @@ if (-not $selectedUsers -or $selectedUsers.Count -eq 0) {
 $users.list = $selectedUsers
 
 # Fix for Write-Verbose formatting issues
-Write-Verbose "Users object: $($users | ConvertTo-Json -Depth 2 -Compress)"
+Write-Verbose "Users object: $($users | ConvertTo-Json -Depth 10 -Compress)"
 Write-Verbose "Selected users count: $($users.list.Count)"
 # Format as string first, then output with Write-Verbose
 $usersTable = ($users.list | Format-Table -AutoSize | Out-String).Trim()
@@ -849,7 +983,7 @@ if (-not $selectedFolders -or $selectedFolders.Count -eq 0) {
 
 # Print selected folders
 Write-Host "Selected Folders:" -ForegroundColor Cyan
-$foldersTable = $selectedFolders | Format-Table -Property * -AutoSize | Out-String
+$foldersTable = $selectedFolders | Format-Table -Property FolderName,SiteDisplayName -AutoSize | Out-String
 Write-Host $foldersTable
 
 Write-Host "Processing selected folders..."
@@ -916,6 +1050,29 @@ foreach ($folder in $selectedFolders) {
     }
 }
 
+Write-Host "You can now edit the folder names for shortcut creation."
+
+try {
+    # Show the folder name edit form
+    $editedFolders = Show-FolderNameEditForm -SelectedFolders $selectedFolders -Verbose:$SetVerbose
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "Error: Unable to show folder name edit form."
+        pause
+        exit 1
+    }
+} catch {
+    Write-Error "Error: $($_.Exception.Message)"
+    pause
+    exit 1
+}
+
+# Check if user canceled the edit form
+if (-not $editedFolders -or $editedFolders.Count -eq 0) {
+    Write-Error "Folder editing was canceled. Exiting..."
+    pause
+    exit
+}
+
 Write-Host "Associating folders with users..."
 
 # Associate selected folders with users
@@ -940,7 +1097,7 @@ foreach ($user in $users.list) {
             
             # Find matching folders for this site's drive ID
             $matchedFolders = @()
-            foreach ($folder in $selectedFolders) {
+            foreach ($folder in $editedFolders) {
                 $folderDriveId = $folder.DriveId.ToString().Trim()
                 $userSiteDriveId = $siteDriveId.ToString().Trim()
                 
@@ -977,44 +1134,14 @@ foreach ($user in $users.list) {
 }
 
 Write-Host "Processing completed. Please review the selected folders and users."
-Write-Host "You can now edit the folder names for shortcut creation."
-
-try {
-    # Show the folder name edit form
-    $editedFolders = Show-FolderNameEditForm -SelectedFolders $selectedFolders -Verbose:$SetVerbose
-    if ($LASTEXITCODE -ne 0) {
-        Write-Error "Error: Unable to show folder name edit form."
-        pause
-        exit 1
-    }
-} catch {
-    Write-Error "Error: $($_.Exception.Message)"
-    pause
-    exit 1
-}
-
-# Check if user canceled the edit form
-if (-not $editedFolders -or $editedFolders.Count -eq 0) {
-    Write-Error "Folder editing was canceled. Exiting..."
-    pause
-    exit
-}
 
 # Display the edited folders in a table format
 Write-Host "Edited Folders for Shortcut Creation:" -ForegroundColor Cyan
 foreach ($folder in $editedFolders) {
     Write-Host ""
-    Write-Host "Folder Name: $($folder.FolderName)" -ForegroundColor Green
-    Write-Host "DriveId: $($folder.DriveId)" -ForegroundColor Green
-    Write-Host "Path: $($folder.Path)" -ForegroundColor Green
-    Write-Host "DisplayName: $($folder.DisplayName)" -ForegroundColor Green
-    Write-Host "WebId: $($folder.webId)" -ForegroundColor Green
-    Write-Host "eTag: $($folder.eTag)" -ForegroundColor Green
-    Write-Host "eTagList: $($folder.eTagList)" -ForegroundColor Green
-    Write-Host "WebUrl: $($folder.webUrl)" -ForegroundColor Green
-    Write-Host "DomainSiteId: $($folder.DomainSiteId)" -ForegroundColor Green
-    Write-Host "SiteId: $($folder.siteId)" -ForegroundColor Green
-    Write-Host "SiteWebUrl: $($folder.siteWebUrl)" -ForegroundColor Green
+    Write-Host "Foldername: $($folder.FolderName)" -ForegroundColor Green
+    Write-Host "Displayname: $($folder.DisplayName)" -ForegroundColor Green
+    Write-Host "Sharepoint-URL: $($folder.siteWebUrl)" -ForegroundColor Green
     Write-Host ""
 }
 
@@ -1029,7 +1156,7 @@ foreach ($user in $users.list) {
     Write-Host "Folders:" -ForegroundColor Cyan
     
     foreach ($folder in $user.folders) {
-        Write-Host "  - $($folder.FolderName)" -ForegroundColor Green
+        Write-Host "  - $($folder.DisplayName)" -ForegroundColor Green
     }
     
     Write-Host ""
@@ -1088,7 +1215,7 @@ foreach ($user in $users.list) {
             # Remove "" from the response
             $userDrive = $userDrive -replace '"', ''
 
-            Write-Verbose "User's $($user.DisplayName) OneDrive access: $userDrive"
+            Write-Verbose "User's $($user.DisplayName) ($($user.Mail)) OneDrive access: $userDrive"
 
             # Test access to the user's OneDrive
             # Get OneDrive's drive ID
@@ -1105,11 +1232,11 @@ foreach ($user in $users.list) {
                 }
             }
             if (-not $userDriveId) {
-                Write-Warning "No 'OneDrive' found for user: $($user.displayName)"
+                Write-Warning "No 'OneDrive' found for user: $($user.displayName) ($($user.Mail))"
                 $user.DriveAccess = $false
                 continue
             } else {
-                Write-Verbose "User $($user.DisplayName) has OneDrive with ID: $userDriveId"
+                Write-Verbose "User $($user.DisplayName) ($($user.Mail)) has OneDrive with ID: $userDriveId"
                 $user | Add-Member -NotePropertyName "OneDriveId" -NotePropertyValue $userDriveId -Force
                 $user.OneDriveId = $userDriveId
             }
@@ -1123,7 +1250,7 @@ foreach ($user in $users.list) {
                     continue
                 } else {
                     $userDriveRootObj = $userDriveRoot | ConvertFrom-Json
-                    Write-Verbose "User $($user.DisplayName) OneDrive root: $($userDriveRootObj.webUrl)"
+                    Write-Verbose "User $($user.DisplayName) ($($user.Mail)) OneDrive root: $($userDriveRootObj.webUrl)"
                     $user.DriveAccess = $true
                 }
             }
@@ -1134,17 +1261,87 @@ foreach ($user in $users.list) {
         }
 
         if ($user.DriveAccess) {
-            Write-Host "Attempt to get access to the user's OneDrive for user $($user.DisplayName) was successful." -ForegroundColor Green
-            if ($matchedFolders.Count -gt 0) {
-                Write-Host "Adding folders to user $($user.DisplayName)'s OneDrive..." -ForegroundColor Green
-                foreach ($folder in $matchedFolders) {
-                    Write-Host "  - Adding folder: $($folder.FolderName) to OneDrive" -ForegroundColor Green
+            Write-Host "Attempt to get access to the user's OneDrive for user $($user.DisplayName) ($($user.Mail)) was successful." -ForegroundColor Green
+            if ($user.folders.Count -gt 0) {
+                Write-Host "Adding folders to user $($user.DisplayName)'s ($($user.Mail)) OneDrive..." -ForegroundColor Green
+                foreach ($folder in $user.folders) {
+                    Write-Host "  - Adding folder: $($folder.DisplayName) to OneDrive" -ForegroundColor Green
+                    
+                    # Create folder object using PowerShell hashtable instead of a raw JSON string
+                    $folderObject = @{
+                        name = $folder.FolderName
+                        remoteItem = @{
+                            sharepointIds = @{
+                                listId = $folder.eTagList
+                                listItemUniqueId = $folder.eTag
+                                siteId = $folder.DomainSiteId
+                                siteUrl = $folder.SiteWebUrl
+                                webId = $folder.WebId
+                            }
+                        }
+                        "@microsoft.graph.conflictBehavior" = "rename"
+                    }
+                    
+                    # Convert to JSON
+                    $POSTBody = $folderObject | ConvertTo-Json -Depth 10
+
+                    try {
+                        # Send the request to create the folder
+                        $response = Send-GraphRequest -Method POST -Uri "$graphEndpoint/drives/$($user.OneDriveId)/root/children" -AccessToken "$accessToken" -Body $POSTBody -Verbose:$SetVerbose
+                        if ($LASTEXITCODE -ne 0) {
+                            Write-Error "Error: Unable to create folder $($folder.FolderName) in OneDrive for user $($user.DisplayName)."
+                        }
+                        $responseObj = $response | ConvertFrom-Json
+                        
+                        # Check if the response contains an error object
+                        if ($responseObj.error) {
+                            # Check for specific error codes
+                            if ($responseObj.error.innerError.code -eq "shortcutAlreadyExists") {
+                                Write-Warning "Shortcut already exists: $($folder.FolderName) - Creation not possible - Skipping"
+                            }
+                            elseif ($responseObj.error.innerError.code -eq "nestedAscendantShortcutExists") {
+                                Write-Warning "A parent shortcut already exists that includes $($folder.FolderName) - Creation not possible - Skipping"
+                            }
+                            else {
+                                Write-Error "Error: $($responseObj.error.message)"
+                                Write-Error "Failed to create folder $($folder.FolderName) in OneDrive for user $($user.DisplayName)."
+                            }
+                        } else {
+                            # Create rename object using PowerShell hashtable
+                            $renameObject = @{
+                                name = $folder.DisplayName
+                            }
+                            
+                            # Convert to JSON
+                            $POSTBody = $renameObject | ConvertTo-Json
+
+                            # Send the request to rename the folder
+                            $response = Send-GraphRequest -Method PATCH -Uri "$graphEndpoint/drives/$($user.OneDriveId)/items/$($responseObj.id)" -AccessToken "$accessToken" -Body $POSTBody -Verbose:$SetVerbose
+                            if ($LASTEXITCODE -ne 0) {
+                                Write-Error "Error: Unable to rename folder $($folder.FolderName) in OneDrive for user $($user.DisplayName)."
+                            }
+                            $responseObj = $response | ConvertFrom-Json
+                            if ($responseObj.error) {
+                                if ($responseObj.error.code -eq "nameAlreadyExists") {
+                                    Write-Error "Folder name already exists: $($folder.DisplayName) - Renaming not possible"
+                                }
+                                else {
+                                    Write-Error "Error: $($responseObj.error.message)"
+                                    Write-Error "Failed to rename folder $($folder.FolderName) in OneDrive for user $($user.DisplayName)."
+                                }
+                            }
+                        }
+                    } catch {
+                        Write-Error "Error: $($_.Exception.Message)"
+                        Write-Error "Failed to create folder $($folder.FolderName) in OneDrive for user $($user.DisplayName)."
+                        continue
+                    }
                 }
             } else {
-                Write-Host "No folders found for user $($user.DisplayName) in OneDrive." -ForegroundColor Yellow
+                Write-Host "No folders found for user $($user.DisplayName) ($($user.Mail)) in OneDrive." -ForegroundColor Yellow
             }
         } else {
-            Write-Warning "Skipping User $($user.DisplayName) - Either no Onedrive access or no OneDrive found." -ForegroundColor Red
+            Write-Warning "Skipping User $($user.DisplayName) ($($user.Mail)) - Either no Onedrive access or no OneDrive found." -ForegroundColor Red
         }
     }
 }
