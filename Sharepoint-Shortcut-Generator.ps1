@@ -268,7 +268,7 @@ if ($InstalledProgs -like "*PowerShell*7*") {
     Write-Host "Please wait..."
     Write-Verbose "Extracting URL from aka.ms link..."
     try {
-        $redirecturl1 = (Invoke-Expression -Command "$curlpath $curldefault -v `"$url`" 2>&1" | Select-String -Pattern "Location: ").Line -replace "< Location: \s*", ""
+        $curlOutput = Invoke-Expression -Command "$curlpath $curldefault -v `"$url`" 2>&1"
         if ($LASTEXITCODE -ne 0) {
             Write-Error "Error: Unable to extract URL from aka.ms link."
             pause
@@ -279,10 +279,20 @@ if ($InstalledProgs -like "*PowerShell*7*") {
         pause
         exit 1
     }
+    $locationHeader = $curlOutput | Where-Object { $_ -match "Location:" } | Select-Object -First 1
+    # Extract URL from location header using a more flexible pattern
+    if ($locationHeader -match "Location:\s*(https?://[^\s]+)") {
+        $redirecturl1 = $matches[1]
+    } else {
+        Write-Error "Error: Unable to extract Location header from response."
+        Write-Verbose "Full response: $($curlOutput | Out-String)"
+        pause
+        exit 1
+    }
     Write-Verbose "Found redirect URL: $redirecturl1"
     Write-Verbose "Extracting final download URL..."
     try {
-        $redirecturl2 = (Invoke-Expression -Command "$curlpath $curldefault -v `"$redirecturl1`" 2>&1" | Select-String -Pattern "Location: ").Line -replace "< Location: \s*", ""
+        $curlOutput = Invoke-Expression -Command "$curlpath $curldefault -v `"$redirecturl1`" 2>&1"
         if ($LASTEXITCODE -ne 0) {
             Write-Error "Error: Unable to extract final download URL."
             pause
@@ -293,6 +303,16 @@ if ($InstalledProgs -like "*PowerShell*7*") {
         pause
         exit 1
     }
+    $locationHeader = $curlOutput | Where-Object { $_ -match "Location:" } | Select-Object -First 1
+    # Extract URL from location header using a more flexible pattern
+    if ($locationHeader -match "Location:\s*(https?://[^\s]+)") {
+        $redirecturl2 = $matches[1]
+    } else {
+        Write-Error "Error: Unable to extract Location header from response."
+        Write-Verbose "Full response: $($curlOutput | Out-String)"
+        pause
+        exit 1
+    }
     Write-Verbose "Found final Github URL: $redirecturl2"
     Write-Verbose "Extract version number from URL..."
     $versionv = $redirecturl2 -split "/" | Select-Object -Last 1
@@ -300,7 +320,7 @@ if ($InstalledProgs -like "*PowerShell*7*") {
     Write-Verbose "Found version number: $versionv"
     Write-Host "Downloading PowerShell 7 version $version..."
     try {
-        Invoke-Expression -Command "$curlpath $curldefault -L -o $downloadPath `"https://github.com/PowerShell/PowerShell/releases/download/$versionv/PowerShell-$version-win-x64.msi`""
+        Invoke-Expression -Command "$curlpath $curldefault -L -o `"$downloadPath`" `"https://github.com/PowerShell/PowerShell/releases/download/$versionv/PowerShell-$version-win-x64.msi`""
         if ($LASTEXITCODE -ne 0) {
             Write-Error "Error: Unable to download PowerShell 7 installer."
             pause
@@ -360,7 +380,7 @@ if ($webview2Needed) {
     Write-Host "Please wait..."
     Write-Verbose "Extracting URL from go.microsoft.com link..."
     try {
-        $downloadURL = (Invoke-Expression -Command "$curlpath $curldefault -v `"$url`" 2>&1" | Select-String -Pattern "Location: ").Line -replace "< Location: \s*", ""
+        $curlOutput = Invoke-Expression -Command "$curlpath $curldefault -v `"$url`" 2>&1"
         if ($LASTEXITCODE -ne 0) {
             Write-Error "Error: Unable to extract URL from go.microsoft.com link."
             pause
@@ -371,10 +391,20 @@ if ($webview2Needed) {
         pause
         exit 1
     }
+    $locationHeader = $curlOutput | Where-Object { $_ -match "Location:" } | Select-Object -First 1
+    # Extract URL from location header using a more flexible pattern
+    if ($locationHeader -match "Location:\s*(https?://[^\s]+)") {
+        $downloadURL = $matches[1]
+    } else {
+        Write-Error "Error: Unable to extract Location header from response."
+        Write-Verbose "Full response: $($curlOutput | Out-String)"
+        pause
+        exit 1
+    }
     Write-Verbose "Found redirect URL: $downloadURL"
     Write-Host "Downloading WebView2 Runtime..."
     try {
-        Invoke-Expression -Command "$curlpath $curldefault -L -o $downloadPath `"$downloadURL`""
+        Invoke-Expression -Command "$curlpath $curldefault -L -o `"$downloadPath`" `"$downloadURL`""
         if ($LASTEXITCODE -ne 0) {
             Write-Error "Error: Unable to download WebView2 Runtime installer."
             pause
