@@ -1,35 +1,66 @@
 <#
     .SYNOPSIS
-    This Script is ablel to handle adding Shortcuts to private Tennant OneDrive profiles redirected to the Sharepoint Online files. It supports multiple Users and multiple Sharepoint Sites with multiple Sharepoint Directories.
+    This Script is ablel to handle adding Shortcuts to private Tennant OneDrive profiles redirected to the Sharepoint Online files. It supports multiple Users and multiple Sharepoint Sites with multiple Sharepoint folders.
     It handles OAuth2 authentication with Microsoft Graph API and checks if PowerShell 7 is installed. If not, it installs PowerShell 7.
     It also handles OAuth2 authentication with the Microsoft Admin Center to get access to the individual private OneDrive profiles.
 
     .DESCRIPTION
     This script checks if PowerShell 7 is installed, and if not, it installs it.
     It also handles OAuth2 authentication with Microsoft Graph API.
+    It checks if WebView2 is installed, and if not, it installs it.
+    It handles OAuth2 authentication with the Microsoft Admin Center to get access to the individual private OneDrive profiles.
+    It uses the Microsoft Graph API to get all users in the tenant and allows the user to select which users to work with.
+
 
     .PARAMETER tenantId
     Enter your Microsoft Tenant ID.
+    This is the ID of your Entra Directory (Azure Active Directory) tenant.
+    Docs:
+    Find your tennant ID: https://learn.microsoft.com/entra/fundamentals/how-to-find-tenant
 
     .PARAMETER clientId
     Enter your Microsoft Client ID.
+    This is the ID of your registered application in Azure AD.
+    Docs:
+    Get the Client ID of your registered application: https://learn.microsoft.com/azure/healthcare-apis/register-application#application-id-client-id
 
     .EXAMPLE
-    .\oauth.ps1 -tenantId 'your-tenant-id' -clientId 'your-client-id'
+    .\oauth.ps1 -tenantId 'your-tenant-id' -clientId 'your-client-id' -Verbose
 
     .NOTES
-    Required Scope-Permissions: files.readwrite.all user.read.all allsites.fullcontrol allsites.manage myfiles.read myfiles.write user.readwrite.all
+    Required Scope-Permissions: files.readwrite.all, user.read.all, allsites.fullcontrol, allsites.manage, myfiles.read, myfiles.write and user.readwrite.all
+    You can find these permissions in Microsoft Graph and Sharepoint API.
+    files.readwrite.all and user.read.all are Microsoft Graph permissions.
+    allsites.fullcontrol, allsites.manage, myfiles.read, myfiles.write and user.readwrite.all are Sharepoint API permissions.
     All Scope-Permissions require Admin Consent for the Tenant.
+    It will not work without Admin Consent and if any of the permissions are missing.
     WebView2 is required for the OAuth2 authentication process.
+    The redirect URI must be set to "https://login.microsoftonline.com/common/oauth2/nativeclient" in the Entra (Azure) AD application registration.
+
+    Docs:
+    Register an application in Azure AD: https://learn.microsoft.com/entra/identity-platform/quickstart-register-app
+    Add a Redirect URI to an application: https://learn.microsoft.com/entra/identity-platform/how-to-add-redirect-uri
+    Configure permissions for an application: https://learn.microsoft.com/entra/identity-platform/quickstart-configure-app-access-web-apis
+    Find your tennant ID: https://learn.microsoft.com/entra/fundamentals/how-to-find-tenant
 #> 
 
 [CmdletBinding(SupportsShouldProcess=$true)]
 Param(
     [Parameter(Mandatory=$true,
-    HelpMessage = "Enter your Microsoft Tennant ID.")]
+    HelpMessage = @"
+Enter your Microsoft Tenant ID.
+This is the ID of your Entra Directory (Azure Active Directory) tenant.
+Docs:
+Find your tennant ID: https://learn.microsoft.com/entra/fundamentals/how-to-find-tenant
+"@)]
     [string]$tenantId,
     [Parameter(Mandatory=$true,
-    HelpMessage = "Enter your Microsoft Client ID.")]
+    HelpMessage = @"
+Enter your Microsoft Client ID.
+This is the ID of your registered application in Azure AD.
+Docs:
+Get the Client ID of your registered application: https://learn.microsoft.com/azure/healthcare-apis/register-application#application-id-client-id
+"@)]
     [string]$clientId
 )
 
