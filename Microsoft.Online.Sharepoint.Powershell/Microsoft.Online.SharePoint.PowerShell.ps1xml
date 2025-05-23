@@ -1,0 +1,524 @@
+<?xml version="1.0" encoding="utf-8" ?>
+
+<Configuration>
+  <ViewDefinitions>
+    <View>
+      <Name>Microsoft.Online.SharePoint.PowerShell.SPOSite</Name>
+      <ViewSelectedBy>
+        <TypeName>Microsoft.Online.SharePoint.PowerShell.SPOSite</TypeName>
+        <TypeName>Deserialized.Microsoft.Online.SharePoint.PowerShell.SPOSite</TypeName>
+      </ViewSelectedBy>
+      <TableControl>
+        <TableHeaders>
+          <TableColumnHeader>
+            <Label>Url</Label>
+            <Alignment>left</Alignment>
+          </TableColumnHeader>
+          <TableColumnHeader>
+            <Label>Owner</Label>
+            <Width>40</Width>
+            <Alignment>left</Alignment>
+          </TableColumnHeader>
+          <TableColumnHeader>
+            <Label>Storage Quota</Label>
+            <Width>13</Width>
+            <Alignment>right</Alignment>
+          </TableColumnHeader>
+        </TableHeaders>
+        <TableRowEntries>
+          <TableRowEntry>
+            <TableColumnItems>
+              <TableColumnItem>
+                <PropertyName>Url</PropertyName>
+              </TableColumnItem>
+              <TableColumnItem>
+                <PropertyName>Owner</PropertyName>
+              </TableColumnItem>
+              <TableColumnItem>
+                <PropertyName>StorageQuota</PropertyName>
+              </TableColumnItem>
+            </TableColumnItems>
+          </TableRowEntry>
+        </TableRowEntries>
+      </TableControl>
+    </View>
+    <View>
+      <Name>Microsoft.Online.SharePoint.PowerShell.SPODeletedSite</Name>
+      <ViewSelectedBy>
+        <TypeName>Microsoft.Online.SharePoint.PowerShell.SPODeletedSite</TypeName>
+        <TypeName>Deserialized.Microsoft.Online.SharePoint.PowerShell.SPODeletedSite</TypeName>
+      </ViewSelectedBy>
+      <TableControl>
+        <TableHeaders>
+          <TableColumnHeader>
+            <Label>Url</Label>
+            <Alignment>left</Alignment>
+          </TableColumnHeader>
+          <TableColumnHeader>
+            <Label>Storage Quota</Label>
+            <Width>13</Width>
+            <Alignment>right</Alignment>
+          </TableColumnHeader>
+          <TableColumnHeader>
+            <Label>Resource Quota</Label>
+            <Width>14</Width>
+            <Alignment>right</Alignment>
+          </TableColumnHeader>
+          <TableColumnHeader>
+            <Label>Deletion Time</Label>
+            <Width>24</Width>
+            <Alignment>left</Alignment>
+          </TableColumnHeader>
+          <TableColumnHeader>
+            <Label>Days Remaining</Label>
+            <Width>14</Width>
+            <Alignment>right</Alignment>
+          </TableColumnHeader>
+        </TableHeaders>
+        <TableRowEntries>
+          <TableRowEntry>
+            <TableColumnItems>
+              <TableColumnItem>
+                <PropertyName>Url</PropertyName>
+              </TableColumnItem>
+              <TableColumnItem>
+                <PropertyName>StorageQuota</PropertyName>
+              </TableColumnItem>
+              <TableColumnItem>
+                <PropertyName>ResourceQuota</PropertyName>
+              </TableColumnItem>
+              <TableColumnItem>
+                <PropertyName>DeletionTime</PropertyName>
+              </TableColumnItem>
+              <TableColumnItem>
+                <PropertyName>DaysRemaining</PropertyName>
+              </TableColumnItem>
+            </TableColumnItems>
+          </TableRowEntry>
+        </TableRowEntries>
+      </TableControl>
+    </View>
+    <View>
+      <Name>Microsoft.Online.SharePoint.PowerShell.SPOWebTemplate</Name>
+      <ViewSelectedBy>
+        <TypeName>Microsoft.Online.SharePoint.PowerShell.SPOWebTemplate</TypeName>
+        <TypeName>Deserialized.Microsoft.Online.SharePoint.PowerShell.SPOWebTemplate</TypeName>
+      </ViewSelectedBy>
+      <TableControl>
+        <TableHeaders>
+          <TableColumnHeader>
+            <Label>Name</Label>
+            <Alignment>left</Alignment>
+          </TableColumnHeader>
+          <TableColumnHeader>
+            <Label>Title</Label>
+            <Alignment>left</Alignment>
+          </TableColumnHeader>
+          <TableColumnHeader>
+            <Label>LocaleId</Label>
+            <Alignment>right</Alignment>
+          </TableColumnHeader>
+          <TableColumnHeader>
+            <Label>CompatibilityLevel</Label>
+            <Alignment>right</Alignment>
+          </TableColumnHeader>
+        </TableHeaders>
+        <TableRowEntries>
+          <TableRowEntry>
+            <TableColumnItems>
+              <TableColumnItem>
+                <PropertyName>Name</PropertyName>
+              </TableColumnItem>
+              <TableColumnItem>
+                <PropertyName>Title</PropertyName>
+              </TableColumnItem>
+              <TableColumnItem>
+                <PropertyName>LocaleId</PropertyName>
+              </TableColumnItem>
+              <TableColumnItem>
+                <PropertyName>CompatibilityLevel</PropertyName>
+              </TableColumnItem>
+            </TableColumnItems>
+          </TableRowEntry>
+        </TableRowEntries>
+      </TableControl>
+    </View>
+    <View>
+      <Name>Microsoft.Online.SharePoint.PowerShell.SPOUser</Name>
+      <ViewSelectedBy>
+        <TypeName>Microsoft.Online.SharePoint.PowerShell.SPOUser</TypeName>
+        <TypeName>Deserialized.Microsoft.Online.SharePoint.PowerShell.SPOUser</TypeName>
+      </ViewSelectedBy>
+      <TableControl>
+        <TableHeaders>
+          <TableColumnHeader>
+            <Label>Display Name</Label>
+            <Alignment>left</Alignment>
+          </TableColumnHeader>
+          <TableColumnHeader>
+            <Label>Login Name</Label>
+            <Alignment>left</Alignment>
+          </TableColumnHeader>
+          <TableColumnHeader>
+            <Label>Groups</Label>
+            <Alignment>left</Alignment>
+          </TableColumnHeader>
+          <TableColumnHeader>
+            <Label>User Type</Label>
+            <Alignment>left</Alignment>
+          </TableColumnHeader>
+        </TableHeaders>
+        <TableRowEntries>
+          <TableRowEntry>
+            <TableColumnItems>
+              <TableColumnItem>
+                <PropertyName>DisplayName</PropertyName>
+              </TableColumnItem>
+              <TableColumnItem>
+                <PropertyName>LoginName</PropertyName>
+              </TableColumnItem>
+              <TableColumnItem>
+                <PropertyName>Groups</PropertyName>
+              </TableColumnItem>
+              <TableColumnItem>
+                <PropertyName>UserType</PropertyName>
+              </TableColumnItem>
+            </TableColumnItems>
+          </TableRowEntry>
+        </TableRowEntries>
+      </TableControl>
+    </View>
+    <View>
+      <Name>Microsoft.Online.SharePoint.PowerShell.SPOTenantLogEntry</Name>
+      <ViewSelectedBy>
+        <TypeName>Microsoft.Online.SharePoint.PowerShell.SPOTenantLogEntry</TypeName>
+        <TypeName>Deserialized.Microsoft.Online.SharePoint.PowerShell.SPOTenantLogEntry</TypeName>
+      </ViewSelectedBy>
+      <TableControl>
+        <TableHeaders>
+          <TableColumnHeader>
+            <Label>Timestamp in UTC</Label>
+            <Alignment>left</Alignment>
+          </TableColumnHeader>
+          <TableColumnHeader>
+            <Label>CorrelationId</Label>
+            <Alignment>left</Alignment>
+          </TableColumnHeader>
+          <TableColumnHeader>
+            <Label>User</Label>
+            <Alignment>left</Alignment>
+          </TableColumnHeader>
+          <TableColumnHeader>
+            <Label>Message</Label>
+            <Alignment>left</Alignment>
+          </TableColumnHeader>
+          <TableColumnHeader>
+            <Label>CategoryId</Label>
+            <Alignment>right</Alignment>
+          </TableColumnHeader>
+          <TableColumnHeader>
+            <Label>Source</Label>
+            <Alignment>right</Alignment>
+          </TableColumnHeader>
+        </TableHeaders>
+        <TableRowEntries>
+          <TableRowEntry>
+            <TableColumnItems>
+              <TableColumnItem>
+                <PropertyName>TimestampUtc</PropertyName>
+              </TableColumnItem>
+              <TableColumnItem>
+                <PropertyName>CorrelationId</PropertyName>
+              </TableColumnItem>
+              <TableColumnItem>
+                <PropertyName>User</PropertyName>
+              </TableColumnItem>
+              <TableColumnItem>
+                <PropertyName>Message</PropertyName>
+              </TableColumnItem>
+              <TableColumnItem>
+                <PropertyName>CategoryId</PropertyName>
+              </TableColumnItem>
+              <TableColumnItem>
+                <PropertyName>Source</PropertyName>
+              </TableColumnItem>
+            </TableColumnItems>
+          </TableRowEntry>
+        </TableRowEntries>
+      </TableControl>
+    </View>
+
+    <View>
+      <Name>Microsoft.Online.SharePoint.PowerShell.SPOAppErrorEntry</Name>
+      <ViewSelectedBy>
+        <TypeName>Microsoft.Online.SharePoint.PowerShell.SPOAppErrorEntry</TypeName>
+        <TypeName>Deserialized.Microsoft.Online.SharePoint.PowerShell.SPOAppErrorEntry</TypeName>
+      </ViewSelectedBy>
+      <TableControl>
+        <TableHeaders>
+          <TableColumnHeader>
+            <Label>ErrorMessage</Label>
+            <Alignment>left</Alignment>
+          </TableColumnHeader>
+          <TableColumnHeader>
+            <Label>TimeStampInUtc</Label>
+            <Alignment>left</Alignment>
+          </TableColumnHeader>
+          <TableColumnHeader>
+            <Label>InstanceUrl</Label>
+            <Alignment>left</Alignment>
+          </TableColumnHeader>
+          <TableColumnHeader>
+            <Label>CorrelationId</Label>
+            <Alignment>left</Alignment>
+          </TableColumnHeader>
+          <TableColumnHeader>
+            <Label>ErrorType</Label>
+            <Alignment>left</Alignment>
+          </TableColumnHeader>
+        </TableHeaders>
+        <TableRowEntries>
+          <TableRowEntry>
+            <TableColumnItems>
+              <TableColumnItem>
+                <PropertyName>ErrorMessage</PropertyName>
+              </TableColumnItem>
+              <TableColumnItem>
+                <PropertyName>TimeStampInUtc</PropertyName>
+              </TableColumnItem>
+              <TableColumnItem>
+                <PropertyName>InstanceUrl</PropertyName>
+              </TableColumnItem>
+              <TableColumnItem>
+                <PropertyName>CorrelationId</PropertyName>
+              </TableColumnItem>
+              <TableColumnItem>
+                <PropertyName>ErrorType</PropertyName>
+              </TableColumnItem>
+            </TableColumnItems>
+          </TableRowEntry>
+        </TableRowEntries>
+      </TableControl>
+    </View>
+
+
+  </ViewDefinitions>
+</Configuration>
+
+<!-- SIG # Begin signature block -->
+<!-- MIIoIAYJKoZIhvcNAQcCoIIoETCCKA0CAQExDzANBglghkgBZQMEAgEFADB5Bgor -->
+<!-- BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG -->
+<!-- KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCB3Oq2HoCqvhssT -->
+<!-- rKjQ+fqnqND1KdZyPCvx4OzLPdX4M6CCDXYwggX0MIID3KADAgECAhMzAAAEBGx0 -->
+<!-- Bv9XKydyAAAAAAQEMA0GCSqGSIb3DQEBCwUAMH4xCzAJBgNVBAYTAlVTMRMwEQYD -->
+<!-- VQQIEwpXYXNoaW5ndG9uMRAwDgYDVQQHEwdSZWRtb25kMR4wHAYDVQQKExVNaWNy -->
+<!-- b3NvZnQgQ29ycG9yYXRpb24xKDAmBgNVBAMTH01pY3Jvc29mdCBDb2RlIFNpZ25p -->
+<!-- bmcgUENBIDIwMTEwHhcNMjQwOTEyMjAxMTE0WhcNMjUwOTExMjAxMTE0WjB0MQsw -->
+<!-- CQYDVQQGEwJVUzETMBEGA1UECBMKV2FzaGluZ3RvbjEQMA4GA1UEBxMHUmVkbW9u -->
+<!-- ZDEeMBwGA1UEChMVTWljcm9zb2Z0IENvcnBvcmF0aW9uMR4wHAYDVQQDExVNaWNy -->
+<!-- b3NvZnQgQ29ycG9yYXRpb24wggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIB -->
+<!-- AQC0KDfaY50MDqsEGdlIzDHBd6CqIMRQWW9Af1LHDDTuFjfDsvna0nEuDSYJmNyz -->
+<!-- NB10jpbg0lhvkT1AzfX2TLITSXwS8D+mBzGCWMM/wTpciWBV/pbjSazbzoKvRrNo -->
+<!-- DV/u9omOM2Eawyo5JJJdNkM2d8qzkQ0bRuRd4HarmGunSouyb9NY7egWN5E5lUc3 -->
+<!-- a2AROzAdHdYpObpCOdeAY2P5XqtJkk79aROpzw16wCjdSn8qMzCBzR7rvH2WVkvF -->
+<!-- HLIxZQET1yhPb6lRmpgBQNnzidHV2Ocxjc8wNiIDzgbDkmlx54QPfw7RwQi8p1fy -->
+<!-- 4byhBrTjv568x8NGv3gwb0RbAgMBAAGjggFzMIIBbzAfBgNVHSUEGDAWBgorBgEE -->
+<!-- AYI3TAgBBggrBgEFBQcDAzAdBgNVHQ4EFgQU8huhNbETDU+ZWllL4DNMPCijEU4w -->
+<!-- RQYDVR0RBD4wPKQ6MDgxHjAcBgNVBAsTFU1pY3Jvc29mdCBDb3Jwb3JhdGlvbjEW -->
+<!-- MBQGA1UEBRMNMjMwMDEyKzUwMjkyMzAfBgNVHSMEGDAWgBRIbmTlUAXTgqoXNzci -->
+<!-- tW2oynUClTBUBgNVHR8ETTBLMEmgR6BFhkNodHRwOi8vd3d3Lm1pY3Jvc29mdC5j -->
+<!-- b20vcGtpb3BzL2NybC9NaWNDb2RTaWdQQ0EyMDExXzIwMTEtMDctMDguY3JsMGEG -->
+<!-- CCsGAQUFBwEBBFUwUzBRBggrBgEFBQcwAoZFaHR0cDovL3d3dy5taWNyb3NvZnQu -->
+<!-- Y29tL3BraW9wcy9jZXJ0cy9NaWNDb2RTaWdQQ0EyMDExXzIwMTEtMDctMDguY3J0 -->
+<!-- MAwGA1UdEwEB/wQCMAAwDQYJKoZIhvcNAQELBQADggIBAIjmD9IpQVvfB1QehvpC -->
+<!-- Ge7QeTQkKQ7j3bmDMjwSqFL4ri6ae9IFTdpywn5smmtSIyKYDn3/nHtaEn0X1NBj -->
+<!-- L5oP0BjAy1sqxD+uy35B+V8wv5GrxhMDJP8l2QjLtH/UglSTIhLqyt8bUAqVfyfp -->
+<!-- h4COMRvwwjTvChtCnUXXACuCXYHWalOoc0OU2oGN+mPJIJJxaNQc1sjBsMbGIWv3 -->
+<!-- cmgSHkCEmrMv7yaidpePt6V+yPMik+eXw3IfZ5eNOiNgL1rZzgSJfTnvUqiaEQ0X -->
+<!-- dG1HbkDv9fv6CTq6m4Ty3IzLiwGSXYxRIXTxT4TYs5VxHy2uFjFXWVSL0J2ARTYL -->
+<!-- E4Oyl1wXDF1PX4bxg1yDMfKPHcE1Ijic5lx1KdK1SkaEJdto4hd++05J9Bf9TAmi -->
+<!-- u6EK6C9Oe5vRadroJCK26uCUI4zIjL/qG7mswW+qT0CW0gnR9JHkXCWNbo8ccMk1 -->
+<!-- sJatmRoSAifbgzaYbUz8+lv+IXy5GFuAmLnNbGjacB3IMGpa+lbFgih57/fIhamq -->
+<!-- 5VhxgaEmn/UjWyr+cPiAFWuTVIpfsOjbEAww75wURNM1Imp9NJKye1O24EspEHmb -->
+<!-- DmqCUcq7NqkOKIG4PVm3hDDED/WQpzJDkvu4FrIbvyTGVU01vKsg4UfcdiZ0fQ+/ -->
+<!-- V0hf8yrtq9CkB8iIuk5bBxuPMIIHejCCBWKgAwIBAgIKYQ6Q0gAAAAAAAzANBgkq -->
+<!-- hkiG9w0BAQsFADCBiDELMAkGA1UEBhMCVVMxEzARBgNVBAgTCldhc2hpbmd0b24x -->
+<!-- EDAOBgNVBAcTB1JlZG1vbmQxHjAcBgNVBAoTFU1pY3Jvc29mdCBDb3Jwb3JhdGlv -->
+<!-- bjEyMDAGA1UEAxMpTWljcm9zb2Z0IFJvb3QgQ2VydGlmaWNhdGUgQXV0aG9yaXR5 -->
+<!-- IDIwMTEwHhcNMTEwNzA4MjA1OTA5WhcNMjYwNzA4MjEwOTA5WjB+MQswCQYDVQQG -->
+<!-- EwJVUzETMBEGA1UECBMKV2FzaGluZ3RvbjEQMA4GA1UEBxMHUmVkbW9uZDEeMBwG -->
+<!-- A1UEChMVTWljcm9zb2Z0IENvcnBvcmF0aW9uMSgwJgYDVQQDEx9NaWNyb3NvZnQg -->
+<!-- Q29kZSBTaWduaW5nIFBDQSAyMDExMIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIIC -->
+<!-- CgKCAgEAq/D6chAcLq3YbqqCEE00uvK2WCGfQhsqa+laUKq4BjgaBEm6f8MMHt03 -->
+<!-- a8YS2AvwOMKZBrDIOdUBFDFC04kNeWSHfpRgJGyvnkmc6Whe0t+bU7IKLMOv2akr -->
+<!-- rnoJr9eWWcpgGgXpZnboMlImEi/nqwhQz7NEt13YxC4Ddato88tt8zpcoRb0Rrrg -->
+<!-- OGSsbmQ1eKagYw8t00CT+OPeBw3VXHmlSSnnDb6gE3e+lD3v++MrWhAfTVYoonpy -->
+<!-- 4BI6t0le2O3tQ5GD2Xuye4Yb2T6xjF3oiU+EGvKhL1nkkDstrjNYxbc+/jLTswM9 -->
+<!-- sbKvkjh+0p2ALPVOVpEhNSXDOW5kf1O6nA+tGSOEy/S6A4aN91/w0FK/jJSHvMAh -->
+<!-- dCVfGCi2zCcoOCWYOUo2z3yxkq4cI6epZuxhH2rhKEmdX4jiJV3TIUs+UsS1Vz8k -->
+<!-- A/DRelsv1SPjcF0PUUZ3s/gA4bysAoJf28AVs70b1FVL5zmhD+kjSbwYuER8ReTB -->
+<!-- w3J64HLnJN+/RpnF78IcV9uDjexNSTCnq47f7Fufr/zdsGbiwZeBe+3W7UvnSSmn -->
+<!-- Eyimp31ngOaKYnhfsi+E11ecXL93KCjx7W3DKI8sj0A3T8HhhUSJxAlMxdSlQy90 -->
+<!-- lfdu+HggWCwTXWCVmj5PM4TasIgX3p5O9JawvEagbJjS4NaIjAsCAwEAAaOCAe0w -->
+<!-- ggHpMBAGCSsGAQQBgjcVAQQDAgEAMB0GA1UdDgQWBBRIbmTlUAXTgqoXNzcitW2o -->
+<!-- ynUClTAZBgkrBgEEAYI3FAIEDB4KAFMAdQBiAEMAQTALBgNVHQ8EBAMCAYYwDwYD -->
+<!-- VR0TAQH/BAUwAwEB/zAfBgNVHSMEGDAWgBRyLToCMZBDuRQFTuHqp8cx0SOJNDBa -->
+<!-- BgNVHR8EUzBRME+gTaBLhklodHRwOi8vY3JsLm1pY3Jvc29mdC5jb20vcGtpL2Ny -->
+<!-- bC9wcm9kdWN0cy9NaWNSb29DZXJBdXQyMDExXzIwMTFfMDNfMjIuY3JsMF4GCCsG -->
+<!-- AQUFBwEBBFIwUDBOBggrBgEFBQcwAoZCaHR0cDovL3d3dy5taWNyb3NvZnQuY29t -->
+<!-- L3BraS9jZXJ0cy9NaWNSb29DZXJBdXQyMDExXzIwMTFfMDNfMjIuY3J0MIGfBgNV -->
+<!-- HSAEgZcwgZQwgZEGCSsGAQQBgjcuAzCBgzA/BggrBgEFBQcCARYzaHR0cDovL3d3 -->
+<!-- dy5taWNyb3NvZnQuY29tL3BraW9wcy9kb2NzL3ByaW1hcnljcHMuaHRtMEAGCCsG -->
+<!-- AQUFBwICMDQeMiAdAEwAZQBnAGEAbABfAHAAbwBsAGkAYwB5AF8AcwB0AGEAdABl -->
+<!-- AG0AZQBuAHQALiAdMA0GCSqGSIb3DQEBCwUAA4ICAQBn8oalmOBUeRou09h0ZyKb -->
+<!-- C5YR4WOSmUKWfdJ5DJDBZV8uLD74w3LRbYP+vj/oCso7v0epo/Np22O/IjWll11l -->
+<!-- hJB9i0ZQVdgMknzSGksc8zxCi1LQsP1r4z4HLimb5j0bpdS1HXeUOeLpZMlEPXh6 -->
+<!-- I/MTfaaQdION9MsmAkYqwooQu6SpBQyb7Wj6aC6VoCo/KmtYSWMfCWluWpiW5IP0 -->
+<!-- wI/zRive/DvQvTXvbiWu5a8n7dDd8w6vmSiXmE0OPQvyCInWH8MyGOLwxS3OW560 -->
+<!-- STkKxgrCxq2u5bLZ2xWIUUVYODJxJxp/sfQn+N4sOiBpmLJZiWhub6e3dMNABQam -->
+<!-- ASooPoI/E01mC8CzTfXhj38cbxV9Rad25UAqZaPDXVJihsMdYzaXht/a8/jyFqGa -->
+<!-- J+HNpZfQ7l1jQeNbB5yHPgZ3BtEGsXUfFL5hYbXw3MYbBL7fQccOKO7eZS/sl/ah -->
+<!-- XJbYANahRr1Z85elCUtIEJmAH9AAKcWxm6U/RXceNcbSoqKfenoi+kiVH6v7RyOA -->
+<!-- 9Z74v2u3S5fi63V4GuzqN5l5GEv/1rMjaHXmr/r8i+sLgOppO6/8MO0ETI7f33Vt -->
+<!-- Y5E90Z1WTk+/gFcioXgRMiF670EKsT/7qMykXcGhiJtXcVZOSEXAQsmbdlsKgEhr -->
+<!-- /Xmfwb1tbWrJUnMTDXpQzTGCGgAwghn8AgEBMIGVMH4xCzAJBgNVBAYTAlVTMRMw -->
+<!-- EQYDVQQIEwpXYXNoaW5ndG9uMRAwDgYDVQQHEwdSZWRtb25kMR4wHAYDVQQKExVN -->
+<!-- aWNyb3NvZnQgQ29ycG9yYXRpb24xKDAmBgNVBAMTH01pY3Jvc29mdCBDb2RlIFNp -->
+<!-- Z25pbmcgUENBIDIwMTECEzMAAAQEbHQG/1crJ3IAAAAABAQwDQYJYIZIAWUDBAIB -->
+<!-- BQCggaIwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwLwYJKoZIhvcNAQkEMSIE -->
+<!-- ILi5lrFQ3217NwaVZ+yBua/H0pOyenIi7Lr9gqVLZj1+MFQGCisGAQQBgjcCAQwx -->
+<!-- RjBEoCKAIABNAGkAYwByAG8AcwBvAGYAdAAgAE8AZgBmAGkAYwBloR6AHGh0dHA6 -->
+<!-- Ly9vZmZpY2UubWljcm9zb2Z0LmNvbSAwDQYJKoZIhvcNAQEBBQAEggEAMg7HFD73 -->
+<!-- quUViq6UwC/qRYYauFKAQzVZI/KMyxgH8+HntmCPqoLMmHxwmRealE9dNwW6h7u6 -->
+<!-- xUSrtunXxidF3nGfgI/kYO+Q4jFRW8DpbUvRY9Zd5fN5cEzN0vexSPG0J3u1RkGu -->
+<!-- PNUVS9HZb3W42mYJWbusj6wwHrsJAr7qvwxmo2Xb2OygEo+e3Hyhmvtf/gxXFadb -->
+<!-- oYogqwUpj6PXixOFYHM1aFpFxvi9Eg0cGGnJO4YeaRou+IkwCvtL94ktc7XPzkaN -->
+<!-- 63FhWCz5V1KQBYC+ewoOr/1J5NTQz5vEGK82X3wGeFj53meNkOZDii/zGqpzUZWj -->
+<!-- aNZvFaeoNco47qGCF5YwgheSBgorBgEEAYI3AwMBMYIXgjCCF34GCSqGSIb3DQEH -->
+<!-- AqCCF28wghdrAgEDMQ8wDQYJYIZIAWUDBAIBBQAwggFRBgsqhkiG9w0BCRABBKCC -->
+<!-- AUAEggE8MIIBOAIBAQYKKwYBBAGEWQoDATAxMA0GCWCGSAFlAwQCAQUABCAtvYHI -->
+<!-- BoiR7L5MNxHwcH1Ci5WGx4xYB+10BFeK1m36ygIGZ/fVd0elGBIyMDI1MDQxNzAy -->
+<!-- Mzc1MC42M1owBIACAfSggdGkgc4wgcsxCzAJBgNVBAYTAlVTMRMwEQYDVQQIEwpX -->
+<!-- YXNoaW5ndG9uMRAwDgYDVQQHEwdSZWRtb25kMR4wHAYDVQQKExVNaWNyb3NvZnQg -->
+<!-- Q29ycG9yYXRpb24xJTAjBgNVBAsTHE1pY3Jvc29mdCBBbWVyaWNhIE9wZXJhdGlv -->
+<!-- bnMxJzAlBgNVBAsTHm5TaGllbGQgVFNTIEVTTjpBMDAwLTA1RTAtRDk0NzElMCMG -->
+<!-- A1UEAxMcTWljcm9zb2Z0IFRpbWUtU3RhbXAgU2VydmljZaCCEe0wggcgMIIFCKAD -->
+<!-- AgECAhMzAAACCHidWF2Sx9lSAAEAAAIIMA0GCSqGSIb3DQEBCwUAMHwxCzAJBgNV -->
+<!-- BAYTAlVTMRMwEQYDVQQIEwpXYXNoaW5ndG9uMRAwDgYDVQQHEwdSZWRtb25kMR4w -->
+<!-- HAYDVQQKExVNaWNyb3NvZnQgQ29ycG9yYXRpb24xJjAkBgNVBAMTHU1pY3Jvc29m -->
+<!-- dCBUaW1lLVN0YW1wIFBDQSAyMDEwMB4XDTI1MDEzMDE5NDI1M1oXDTI2MDQyMjE5 -->
+<!-- NDI1M1owgcsxCzAJBgNVBAYTAlVTMRMwEQYDVQQIEwpXYXNoaW5ndG9uMRAwDgYD -->
+<!-- VQQHEwdSZWRtb25kMR4wHAYDVQQKExVNaWNyb3NvZnQgQ29ycG9yYXRpb24xJTAj -->
+<!-- BgNVBAsTHE1pY3Jvc29mdCBBbWVyaWNhIE9wZXJhdGlvbnMxJzAlBgNVBAsTHm5T -->
+<!-- aGllbGQgVFNTIEVTTjpBMDAwLTA1RTAtRDk0NzElMCMGA1UEAxMcTWljcm9zb2Z0 -->
+<!-- IFRpbWUtU3RhbXAgU2VydmljZTCCAiIwDQYJKoZIhvcNAQEBBQADggIPADCCAgoC -->
+<!-- ggIBALXLcAjmUjPcinWcrkExRRsZGyNKcLP9UazffO9jQ16yGw+B+V3f9nf/d1Lx -->
+<!-- YoEuUOWiyZck5mUVKI1dR3oNMnED2KT9lsJ1YnvwsqNs3e0WRfZzpFGlEykDyyr+ -->
+<!-- gFtGvI/dzxD+DGkkAocfPxy5Kft7B8IvOc2bGqWJOTdDkserPY+N5goP91sowFPZ -->
+<!-- MABYC+6bjP8dcgnq0V0ag1XhZRFmzAJK3pE7BqpDWgBga8Sd0f4NdmrX5seyC9w8 -->
+<!-- 0J1NIilahtCIlL9QouJHTYo0KoHgj3JqMVNKWcwgQzP82LnfygYjrimFy82lR7b6 -->
+<!-- popYdnx3hPUqCG9GZJIXhgXkM0QlvFoJTCzLudQuawWdNo6NU6hMVZZ9Ze8G44qQ -->
+<!-- FxApYYq+uSL3vqPjH7l7MA/fp+re7p0dElMtkC7h0S46ihTf6Qxmv5EFhaNMdAIp -->
+<!-- X7JnVJPR4aRsdegDaXLJEOU2MFByh5kjFYJm2z93f6d/WOJIs3p/rB0dpTPQAPA5 -->
+<!-- ND9oSjUgLzl4V4+/IgprEUmQZTYyprpfOreoKrm2iQge2OGiCysSB8MpN4VdO12G -->
+<!-- XUg+0twJ8xxY4YYBeixVRTsb3jwXpb3rjbh/ZUcPwvcWjIAj36vjPIhBSaqIRLO5 -->
+<!-- BZ5alNOMVjAKaBdoY65INXxw05VAHog/M+d5mFVOPDFsBmVpAgMBAAGjggFJMIIB -->
+<!-- RTAdBgNVHQ4EFgQUozHi986pxROBg5UH1/Xz+aF6AU0wHwYDVR0jBBgwFoAUn6cV -->
+<!-- XQBeYl2D9OXSZacbUzUZ6XIwXwYDVR0fBFgwVjBUoFKgUIZOaHR0cDovL3d3dy5t -->
+<!-- aWNyb3NvZnQuY29tL3BraW9wcy9jcmwvTWljcm9zb2Z0JTIwVGltZS1TdGFtcCUy -->
+<!-- MFBDQSUyMDIwMTAoMSkuY3JsMGwGCCsGAQUFBwEBBGAwXjBcBggrBgEFBQcwAoZQ -->
+<!-- aHR0cDovL3d3dy5taWNyb3NvZnQuY29tL3BraW9wcy9jZXJ0cy9NaWNyb3NvZnQl -->
+<!-- MjBUaW1lLVN0YW1wJTIwUENBJTIwMjAxMCgxKS5jcnQwDAYDVR0TAQH/BAIwADAW -->
+<!-- BgNVHSUBAf8EDDAKBggrBgEFBQcDCDAOBgNVHQ8BAf8EBAMCB4AwDQYJKoZIhvcN -->
+<!-- AQELBQADggIBAFGzMokrAB+zCp1pA8WJpgH9k0BhYNrTjRdNxCwJoK5rmewbUiyV -->
+<!-- hpKkfuaJMuvp5ASpdzNmip45r/G8OcwaJ8Y11rQIdtDC2mciGy62so7aOGMRobCU -->
+<!-- mA4yqXbWvsiTpecHNrR7eEE67hQGQyX8sRf4BRG3uLv5FM2wY3Rxc/A9JtMUT73P -->
+<!-- tZqAZtj2nBSj83GQYmx6oYJD/0rZUxTvhvDl7v7wgZSEzbGykk+qdJ4c+FiZwHRZ -->
+<!-- yU7FxUh+P9m5C/Cis9tMQRgNULNI3ftzTIKE8xjsUn4cYUE0nHB3mUoivsZh+rxr -->
+<!-- SA6ILaWMZiVziu3hwJ53VcqDzd/SX1pRWKZYFhe1815uGl+votzeMPw2CysOHO3R -->
+<!-- aCch2dNkKLuPGOwgGKUf32ljn+HptBwsor8TooI/0TVg3vx8to5eRczI7rEuu9Bn -->
+<!-- 64JKLWF1O58ULuhIH8JTlFt8hUdcbSPWjafW2d7h4Js18qpQ9MTfW01tYFHbdiLL -->
+<!-- SveRCYd5gTUYtsvinCSepqKnUFGfpYhQwm2CdxrAQ3fd/wBgZnhrc2ceinMZVXqd -->
+<!-- 598ZVqDhN27L6jLVgX6yEKGhd0yp+E9YWkd7e4kZPgYkSI2zj7bxr/AdS4X5pFpH -->
+<!-- Rw3k/teU7BTXfrSJQIm1B28pBo0DAYjb0o7BLdAauJH0XaM4Y9QCWl4TMIIHcTCC -->
+<!-- BVmgAwIBAgITMwAAABXF52ueAptJmQAAAAAAFTANBgkqhkiG9w0BAQsFADCBiDEL -->
+<!-- MAkGA1UEBhMCVVMxEzARBgNVBAgTCldhc2hpbmd0b24xEDAOBgNVBAcTB1JlZG1v -->
+<!-- bmQxHjAcBgNVBAoTFU1pY3Jvc29mdCBDb3Jwb3JhdGlvbjEyMDAGA1UEAxMpTWlj -->
+<!-- cm9zb2Z0IFJvb3QgQ2VydGlmaWNhdGUgQXV0aG9yaXR5IDIwMTAwHhcNMjEwOTMw -->
+<!-- MTgyMjI1WhcNMzAwOTMwMTgzMjI1WjB8MQswCQYDVQQGEwJVUzETMBEGA1UECBMK -->
+<!-- V2FzaGluZ3RvbjEQMA4GA1UEBxMHUmVkbW9uZDEeMBwGA1UEChMVTWljcm9zb2Z0 -->
+<!-- IENvcnBvcmF0aW9uMSYwJAYDVQQDEx1NaWNyb3NvZnQgVGltZS1TdGFtcCBQQ0Eg -->
+<!-- MjAxMDCCAiIwDQYJKoZIhvcNAQEBBQADggIPADCCAgoCggIBAOThpkzntHIhC3mi -->
+<!-- y9ckeb0O1YLT/e6cBwfSqWxOdcjKNVf2AX9sSuDivbk+F2Az/1xPx2b3lVNxWuJ+ -->
+<!-- Slr+uDZnhUYjDLWNE893MsAQGOhgfWpSg0S3po5GawcU88V29YZQ3MFEyHFcUTE3 -->
+<!-- oAo4bo3t1w/YJlN8OWECesSq/XJprx2rrPY2vjUmZNqYO7oaezOtgFt+jBAcnVL+ -->
+<!-- tuhiJdxqD89d9P6OU8/W7IVWTe/dvI2k45GPsjksUZzpcGkNyjYtcI4xyDUoveO0 -->
+<!-- hyTD4MmPfrVUj9z6BVWYbWg7mka97aSueik3rMvrg0XnRm7KMtXAhjBcTyziYrLN -->
+<!-- ueKNiOSWrAFKu75xqRdbZ2De+JKRHh09/SDPc31BmkZ1zcRfNN0Sidb9pSB9fvzZ -->
+<!-- nkXftnIv231fgLrbqn427DZM9ituqBJR6L8FA6PRc6ZNN3SUHDSCD/AQ8rdHGO2n -->
+<!-- 6Jl8P0zbr17C89XYcz1DTsEzOUyOArxCaC4Q6oRRRuLRvWoYWmEBc8pnol7XKHYC -->
+<!-- 4jMYctenIPDC+hIK12NvDMk2ZItboKaDIV1fMHSRlJTYuVD5C4lh8zYGNRiER9vc -->
+<!-- G9H9stQcxWv2XFJRXRLbJbqvUAV6bMURHXLvjflSxIUXk8A8FdsaN8cIFRg/eKtF -->
+<!-- tvUeh17aj54WcmnGrnu3tz5q4i6tAgMBAAGjggHdMIIB2TASBgkrBgEEAYI3FQEE -->
+<!-- BQIDAQABMCMGCSsGAQQBgjcVAgQWBBQqp1L+ZMSavoKRPEY1Kc8Q/y8E7jAdBgNV -->
+<!-- HQ4EFgQUn6cVXQBeYl2D9OXSZacbUzUZ6XIwXAYDVR0gBFUwUzBRBgwrBgEEAYI3 -->
+<!-- TIN9AQEwQTA/BggrBgEFBQcCARYzaHR0cDovL3d3dy5taWNyb3NvZnQuY29tL3Br -->
+<!-- aW9wcy9Eb2NzL1JlcG9zaXRvcnkuaHRtMBMGA1UdJQQMMAoGCCsGAQUFBwMIMBkG -->
+<!-- CSsGAQQBgjcUAgQMHgoAUwB1AGIAQwBBMAsGA1UdDwQEAwIBhjAPBgNVHRMBAf8E -->
+<!-- BTADAQH/MB8GA1UdIwQYMBaAFNX2VsuP6KJcYmjRPZSQW9fOmhjEMFYGA1UdHwRP -->
+<!-- ME0wS6BJoEeGRWh0dHA6Ly9jcmwubWljcm9zb2Z0LmNvbS9wa2kvY3JsL3Byb2R1 -->
+<!-- Y3RzL01pY1Jvb0NlckF1dF8yMDEwLTA2LTIzLmNybDBaBggrBgEFBQcBAQROMEww -->
+<!-- SgYIKwYBBQUHMAKGPmh0dHA6Ly93d3cubWljcm9zb2Z0LmNvbS9wa2kvY2VydHMv -->
+<!-- TWljUm9vQ2VyQXV0XzIwMTAtMDYtMjMuY3J0MA0GCSqGSIb3DQEBCwUAA4ICAQCd -->
+<!-- VX38Kq3hLB9nATEkW+Geckv8qW/qXBS2Pk5HZHixBpOXPTEztTnXwnE2P9pkbHzQ -->
+<!-- dTltuw8x5MKP+2zRoZQYIu7pZmc6U03dmLq2HnjYNi6cqYJWAAOwBb6J6Gngugnu -->
+<!-- e99qb74py27YP0h1AdkY3m2CDPVtI1TkeFN1JFe53Z/zjj3G82jfZfakVqr3lbYo -->
+<!-- VSfQJL1AoL8ZthISEV09J+BAljis9/kpicO8F7BUhUKz/AyeixmJ5/ALaoHCgRlC -->
+<!-- GVJ1ijbCHcNhcy4sa3tuPywJeBTpkbKpW99Jo3QMvOyRgNI95ko+ZjtPu4b6MhrZ -->
+<!-- lvSP9pEB9s7GdP32THJvEKt1MMU0sHrYUP4KWN1APMdUbZ1jdEgssU5HLcEUBHG/ -->
+<!-- ZPkkvnNtyo4JvbMBV0lUZNlz138eW0QBjloZkWsNn6Qo3GcZKCS6OEuabvshVGtq -->
+<!-- RRFHqfG3rsjoiV5PndLQTHa1V1QJsWkBRH58oWFsc/4Ku+xBZj1p/cvBQUl+fpO+ -->
+<!-- y/g75LcVv7TOPqUxUYS8vwLBgqJ7Fx0ViY1w/ue10CgaiQuPNtq6TPmb/wrpNPgk -->
+<!-- NWcr4A245oyZ1uEi6vAnQj0llOZ0dFtq0Z4+7X6gMTN9vMvpe784cETRkPHIqzqK -->
+<!-- Oghif9lwY1NNje6CbaUFEMFxBmoQtB1VM1izoXBm8qGCA1AwggI4AgEBMIH5oYHR -->
+<!-- pIHOMIHLMQswCQYDVQQGEwJVUzETMBEGA1UECBMKV2FzaGluZ3RvbjEQMA4GA1UE -->
+<!-- BxMHUmVkbW9uZDEeMBwGA1UEChMVTWljcm9zb2Z0IENvcnBvcmF0aW9uMSUwIwYD -->
+<!-- VQQLExxNaWNyb3NvZnQgQW1lcmljYSBPcGVyYXRpb25zMScwJQYDVQQLEx5uU2hp -->
+<!-- ZWxkIFRTUyBFU046QTAwMC0wNUUwLUQ5NDcxJTAjBgNVBAMTHE1pY3Jvc29mdCBU -->
+<!-- aW1lLVN0YW1wIFNlcnZpY2WiIwoBATAHBgUrDgMCGgMVAI2S+7Q0pxKN1grKuEll -->
+<!-- yzJc5RM0oIGDMIGApH4wfDELMAkGA1UEBhMCVVMxEzARBgNVBAgTCldhc2hpbmd0 -->
+<!-- b24xEDAOBgNVBAcTB1JlZG1vbmQxHjAcBgNVBAoTFU1pY3Jvc29mdCBDb3Jwb3Jh -->
+<!-- dGlvbjEmMCQGA1UEAxMdTWljcm9zb2Z0IFRpbWUtU3RhbXAgUENBIDIwMTAwDQYJ -->
+<!-- KoZIhvcNAQELBQACBQDrquUnMCIYDzIwMjUwNDE3MDIyNTQzWhgPMjAyNTA0MTgw -->
+<!-- MjI1NDNaMHcwPQYKKwYBBAGEWQoEATEvMC0wCgIFAOuq5ScCAQAwCgIBAAICCPQC -->
+<!-- Af8wBwIBAAICEk4wCgIFAOusNqcCAQAwNgYKKwYBBAGEWQoEAjEoMCYwDAYKKwYB -->
+<!-- BAGEWQoDAqAKMAgCAQACAwehIKEKMAgCAQACAwGGoDANBgkqhkiG9w0BAQsFAAOC -->
+<!-- AQEAK9EQ5RtwhCZ2E7vCzxSU6rxxOqEJW07MGrOUCmORxJAQru4Tm49NB3LVnLx4 -->
+<!-- 5M8uwfLd+4QhysALHG1IiuWk3SogxzNBr97rXFAdlWbl4OsqTu/sotlE5QDZ0Id8 -->
+<!-- mxekJaWtg8fAvZf6zj4/9e6qoqnUgtNh3Yzx4H4OJ3AEm3f79S+C4kpKSKi8XK7f -->
+<!-- cfxvkj3Bt4di7SYQBURPFsqUP5HRmM2sxYV5fmUd17IlMc8P6nRr+MK3AWkn5vRW -->
+<!-- 7VQt8GPpuVTojuCQRchRZAjEVlEsxBtlkLkOutzdl3/UDwGRja4ZlZpmJjWto/hi -->
+<!-- TCf4pkjMnza6kNZHEJqkL2rWWTGCBA0wggQJAgEBMIGTMHwxCzAJBgNVBAYTAlVT -->
+<!-- MRMwEQYDVQQIEwpXYXNoaW5ndG9uMRAwDgYDVQQHEwdSZWRtb25kMR4wHAYDVQQK -->
+<!-- ExVNaWNyb3NvZnQgQ29ycG9yYXRpb24xJjAkBgNVBAMTHU1pY3Jvc29mdCBUaW1l -->
+<!-- LVN0YW1wIFBDQSAyMDEwAhMzAAACCHidWF2Sx9lSAAEAAAIIMA0GCWCGSAFlAwQC -->
+<!-- AQUAoIIBSjAaBgkqhkiG9w0BCQMxDQYLKoZIhvcNAQkQAQQwLwYJKoZIhvcNAQkE -->
+<!-- MSIEILKeyOSaqaZQ8XUyasGHRWo9aPu0aAfASshwDmZanc8HMIH6BgsqhkiG9w0B -->
+<!-- CRACLzGB6jCB5zCB5DCBvQQgj/+ObwkdrZbU73vvy334W3Znk2Yqq20+TpD71FGm -->
+<!-- Z6kwgZgwgYCkfjB8MQswCQYDVQQGEwJVUzETMBEGA1UECBMKV2FzaGluZ3RvbjEQ -->
+<!-- MA4GA1UEBxMHUmVkbW9uZDEeMBwGA1UEChMVTWljcm9zb2Z0IENvcnBvcmF0aW9u -->
+<!-- MSYwJAYDVQQDEx1NaWNyb3NvZnQgVGltZS1TdGFtcCBQQ0EgMjAxMAITMwAAAgh4 -->
+<!-- nVhdksfZUgABAAACCDAiBCDhuTmsHR3nd9cZjMlXcdn+EO07SYwnuX1yWhINeYZg -->
+<!-- JDANBgkqhkiG9w0BAQsFAASCAgBmvOnuK5VcH/EIKRGY0ZFBwxq3YaGbXOiltoJc -->
+<!-- DWyVC/3/3KTbqRjmBWuGKvratZSkwXBqfPa+7IZr6Fo1O63U/P5+EZh6x9H25FnP -->
+<!-- WIK0jBD+PWt1ot+PlygB6SeeKENa0tSKNH/Yx85slBg1soAJhyukWQBclkzgTBe+ -->
+<!-- sd+LVk3wL+hAXU46nBH6bRGXrGz46eepTDvr+b7M1GY5b6GYgluNDAxS0QSdnLt6 -->
+<!-- ftP5RnqnOKhMOELVgLk0YOLZIixXxLjcl4h9yMN0OpYvbRAGjukjwLAWdxiDbdH/ -->
+<!-- Ph+bVgwNzqslkAj/xS/8+2IBezoTndv0hBFH1q3O8v+fUW9RLtwhD4vjyi4qjyqY -->
+<!-- 0sxl3/QXCuOZumfpn8uNcDCAT3ZTh6kmNfHAhCbOg5/dK7fE4Fe7IcQ9gcgsR161 -->
+<!-- y1c1QmoJYDHQA2eXPHYE3FEGVXIpT3Mxn1FvQilXD4d59NozTW0UMoD3kZnpd/aV -->
+<!-- YIuD3RCbtv/XnZcPnAYldF0RLcf76p//cQiVyz6j9nxP0s1VNydSTUXoACYk3SX5 -->
+<!-- zBafA0VtPgv5qwcWnFK8JZZS2md8hQ7Z5UL/V7XVs8NHE5esKoPXBNzOjYFWoT4T -->
+<!-- a64rvBKNlLx30RfVEw4r2S2oFI5+ar1/w17xHXfV2bOd0eegFf+zjiHAgDH+CP+i -->
+<!-- izZzTQ== -->
+<!-- SIG # End signature block -->
