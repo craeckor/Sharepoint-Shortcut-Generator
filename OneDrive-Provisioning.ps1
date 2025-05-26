@@ -1,6 +1,6 @@
 <#
     .SYNOPSIS
-    This Script is able to handle adding Shortcuts to private Tennant OneDrive profiles redirected to the Sharepoint Online files. It supports multiple Users and multiple Sharepoint Sites with multiple Sharepoint folders.
+    This Script is used to provision OneDrive for Business for users in a Microsoft Entra (Azure) AD tenant.
     It handles OAuth2 authentication with Microsoft Graph API and checks if PowerShell 7 is installed. If not, it installs PowerShell 7.
     It also handles OAuth2 authentication with the Microsoft Admin Center to get access to the individual private OneDrive profiles.
 
@@ -10,9 +10,7 @@
     It checks if WebView2 is installed, and if not, it installs it.
     It handles OAuth2 authentication with the Microsoft Admin Center to get access to the individual private OneDrive profiles.
     It uses the Microsoft Graph API to get all users in the tenant and allows the user to select which users to work with.
-    It allows the user to select which Sharepoint sites to work with.
-    It allows the user to select which Sharepoint folders to work with.
-    It generates shortcuts for the selected users, sites, and folders.
+    It then provisions OneDrive for Business for the selected users.
 
 
     .PARAMETER tenantId
@@ -28,7 +26,7 @@
     Get the Client ID of your registered application: https://learn.microsoft.com/azure/healthcare-apis/register-application#application-id-client-id
 
     .EXAMPLE
-    .\Sharepoint-Shortcut-Generator.ps1 -tenantId 'your-tenant-id' -clientId 'your-client-id' -Verbose
+    .\OneDrive-Provisioning.ps1 -tenantId 'your-tenant-id' -clientId 'your-client-id' -Verbose
 
     .NOTES
     Required Scope-Permissions: files.readwrite.all, user.read.all, allsites.fullcontrol, allsites.manage, myfiles.read, myfiles.write and user.readwrite.all
@@ -445,7 +443,6 @@ Set-Location -Path $workpath
 
 $curlpath = "$workpath\curl\curl.exe"
 $users = @{}
-$sites = @{}
 $requests = @{}
 $requests.succeeded = @{}
 $requests.failed = @{}
@@ -454,6 +451,7 @@ $requests.counter = 0
 Invoke-Expression -Command "$workpath\Import-Assemblies.ps1"
 Import-Module -Name "$workpath\PSAuthClient\PSAuthClient.psd1" -Force
 Import-Module -Name "$workpath\Functions\Forms-Functions.ps1" -Force
+Import-Module -Name "$workpath\Microsoft.Online.SharePoint.PowerShell\Microsoft.Online.SharePoint.PowerShell.psd1" -Force
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
@@ -840,12 +838,12 @@ Write-Verbose "Selected users count: $($users.list.Count)"
 $usersTable = ($users.list | Select-Object DisplayName, Mail, Id | Format-Table -AutoSize | Out-String).Trim()
 Write-Verbose "Selected users:`n$usersTable"
 
-Write-Host "Getting all sites in tenant..."
-
+Write-Host "Get root site name..."
+# Get root site name
 try {
-    $allSites = Send-GraphRequest -Method GET -Uri "$graphEndpoint/sites?search=*" -AccessToken "$accessToken" -Verbose:$SetVerbose
+    $rootSite = Send-GraphRequest -Method GET -Uri "$graphEndpoint/sites/root" -AccessToken "$accessToken" -Verbose:$SetVerbose
     if ($LASTEXITCODE -ne 0) {
-        Write-Error "Error: Unable to get sites from Graph API."
+        Write-Error "Error: Unable to get root site from Graph API."
         pause
         exit 1
     }
@@ -855,618 +853,115 @@ try {
     exit 1
 }
 
-$allSitesObj = $allSites | ConvertFrom-Json
+$rootSiteObj = $rootSite | ConvertFrom-Json
+$rootSiteName = $rootSiteObj.siteCollection.hostname
+Write-Verbose  "Root site name: $rootSiteName"
 
-# Parse the structured site IDs into their components
-foreach ($site in $allSitesObj.value) {
-    if ($site.id -match "([^,]+),([^,]+),(.+)") {
-        $site | Add-Member -NotePropertyName "domainId" -NotePropertyValue $Matches[1] -Force
-        $site | Add-Member -NotePropertyName "siteId" -NotePropertyValue $Matches[2] -Force
-        $site | Add-Member -NotePropertyName "webId" -NotePropertyValue $Matches[3] -Force
-    }
-}
+# Create Admin SharePoint site URL
+$tenantName = $rootSiteName.Split('.')[0]
+$adminSiteUrl = "$tenantName-admin.sharepoint.com"
+Write-Verbose "Admin SharePoint site URL: $adminSiteUrl"
+Write-Host "Admin SharePoint site URL: $adminSiteUrl" -ForegroundColor Cyan
 
-$sitesAllTable = ($allSitesObj.value | Select-Object DisplayName, WebUrl | Format-Table -AutoSize | Out-String).Trim()
-Write-Verbose "All sites in tenant:`n$sitesAllTable"
-
-Write-Host "Showing site selection form..."
-Write-Host "Please select the sites you want to work with..."
-
+# Connect to SPOService
 try {
-    $selectedSites = Show-SiteSelectionForm -SiteList $allSitesObj.value -Verbose:$SetVerbose
+    Write-Host "Connecting to SharePoint Online Admin Center..."
+    Connect-SPOService -Url "https://$($adminSiteUrl)" -ErrorAction Stop
     if ($LASTEXITCODE -ne 0) {
-        Write-Error "Error: Unable to show site selection form."
+        Write-Error "Error: Unable to connect to SharePoint Online Admin Center."
         pause
         exit 1
     }
+    Write-Verbose "Connected to SharePoint Online Admin Center successfully."
 } catch {
-    Write-Error "Error: $($_.Exception.Message)"
+    Write-Error "Error: Unable to connect to SharePoint Online Admin Center. $($_.Exception.Message)"
     pause
     exit 1
 }
 
-if (-not $selectedSites -or $selectedSites.Count -eq 0) {
-    Write-Error "No sites selected. Exiting..."
-    pause
-    exit
-}
+$userlists = @{}
 
-$sites.list = $selectedSites
-
-# Make sure selected sites include the ID components
-foreach ($site in $sites.list) {
-    if (-not ($site.PSObject.Properties.Name -contains "domainId") -and 
-        $site.id -match "([^,]+),([^,]+),(.+)") {
-        $site | Add-Member -NotePropertyName "domainId" -NotePropertyValue $Matches[1] -Force
-        $site | Add-Member -NotePropertyName "siteId" -NotePropertyValue $Matches[2] -Force
-        $site | Add-Member -NotePropertyName "webId" -NotePropertyValue $Matches[3] -Force
-    }
-}
-
-# Format as string first, then output with Write-Verbose
-$sitesTable = ($sites.list | Format-Table -Property DisplayName, WebUrl, id -AutoSize | Out-String).Trim()
-Write-Verbose "Selected sites:`n$sitesTable"
-
-Write-Host "Getting drives for selected sites..."
-
-# Create a new array to store sites with available document libraries
-$validSites = @()
-
-foreach ($site in $sites.list) {
-    $site | Add-Member -NotePropertyName "DriveId" -NotePropertyValue $null -Force
-
-    try{
-        $drive = Send-GraphRequest -Method GET -Uri "$graphEndpoint/sites/$($site.id)/drives" -AccessToken "$accessToken" -Verbose:$SetVerbose
-        if ($LASTEXITCODE -ne 0) {
-            Write-Error "Error: Unable to get drives from Graph API."
-            Write-Verbose "Error details: $drive"
-            Pause
-            exit 1
-        }
-    } catch {
-        Write-Error "Error: $($_.Exception.Message)"
-        Pause
-        exit 1
-    }
-
-    $driveObj = $drive | ConvertFrom-Json
-
-    # Check if drive includes a value where name is Documents
-    $documentsLibrary = $driveObj.value | Where-Object {$_.name -eq "Documents"}
+# Create user lists with max 199 users per list (Graph API pagination handling)
+if ($users.list.Count -gt 0) {
+    Write-Host "Creating user lists for processing..."
+    $batchSize = 199
+    $batchCount = [Math]::Ceiling($users.list.Count / $batchSize)
     
-    if ($documentsLibrary) {
-        $site.DriveId = $documentsLibrary.id
-        Write-Verbose "Documents library found for site: $($site.DisplayName)"
-        $validSites += $site
-    } else {
-        Write-Warning "No Documents library found for site: $($site.DisplayName) - Removing from site list"
-    }
-}
-
-# Replace the original sites list with only the valid sites
-$sites.list = $validSites
-
-Write-Verbose "Retained $(($sites.list | Measure-Object).Count) sites with available Documents libraries"
-
-# Format as string first, then output with Write-Verbose
-$sitesTable = ($sites.list | Format-Table -Property DisplayName, DriveId, WebUrl, id -AutoSize | Out-String).Trim()
-Write-Verbose "Selected sites:`n$sitesTable"
-
-Write-Host "Getting permissions for selected sites..."
-
-foreach ($site in $sites.list) {
-    $site | Add-Member -NotePropertyName "Permissions" -NotePropertyValue @{} -Force
-
-    Write-Verbose "Getting permissions for site: $($site.displayName)"
+    # Create an array to hold all email addresses
+    $allEmails = @()
     
-    # Get User Information List
-    try {
-        $permissionslist = Send-GraphRequest -Method GET -Uri "$(([uri]::new("$graphEndpoint/sites/$($site.id)/lists?filter=displayName eq 'User Information List'")).AbsoluteUri)" -AccessToken "$accessToken" -Verbose:$SetVerbose
-        if ($LASTEXITCODE -ne 0) {
-            Write-Error "Error: Unable to get permissions list from Graph API."
-            pause
-            exit 1
-        }
-    } catch {
-        Write-Error "Error: $($_.Exception.Message)"
-        Pause
-        exit 1
-    }
-    $permissionslistObj = $permissionslist | ConvertFrom-Json
-    $permissionslistId = $permissionslistObj.value | Where-Object {$_.displayName -eq "User Information List"} | Select-Object -ExpandProperty id
-    
-    if (-not $permissionslistId) {
-        Write-Error "Error: No 'User Information List' found for site: $($site.displayName)"
-        pause
-        exit 1
-    }
-    
-    # Get list items with all fields
-    try {
-        $permissions = Send-GraphRequest -Method GET -Uri "$graphEndpoint/sites/$($site.id)/lists/$permissionslistId/items?expand=fields" -AccessToken "$accessToken" -Verbose:$SetVerbose
-        if ($LASTEXITCODE -ne 0) {
-            Write-Error "Error: Unable to get permissions from Graph API."
-            pause
-            exit 1
-        }
-    } catch {
-        Write-Error "Error: $($_.Exception.Message)"
-        Pause
-        exit 1
-    }
-    $permissionsObj = $permissions | ConvertFrom-Json
-    
-    # Extract only the fields property from each item
-    $fieldsOnly = $permissionsObj.value | Select-Object -ExpandProperty fields
-    
-    # Store in the site object
-    $site.Permissions = $fieldsOnly
-    
-    # Display first 5 items with their key properties
-    Write-Verbose "Fields for first 5 users in site '$($site.displayName)':"
-    $fieldsTable = ($fieldsOnly | Select-Object | 
-        Select-Object EMail, Name, FirstName, LastName -First 5 |
-        Format-Table -AutoSize | Out-String).Trim()
-    Write-Verbose $fieldsTable
-    
-    # Show total count
-    Write-Verbose "Total users in permissions list: $($fieldsOnly.Count)"
-}
-
-Write-Host "Associating users with sites..."
-
-$totalaccessCount = 0
-
-foreach ($user in $users.list) {
-    $user | Add-Member -NotePropertyName "sites" -NotePropertyValue @{} -Force
-    $user | Add-Member -NotePropertyName "hasAccess" -NotePropertyValue $null -Force
-    $userEmail = $user.Mail
-    Write-Verbose "Looking for sites with access for user: $($user.displayName) ($userEmail)"
-
-    foreach ($site in $sites.list) {
-        # Find matching user in the site permissions by email
-        $matchingPermission = $site.Permissions | Where-Object { $_.EMail -eq $userEmail }
+    for ($i = 0; $i -lt $batchCount; $i++) {
+        $startIndex = $i * $batchSize
+        $endIndex = [Math]::Min(($i + 1) * $batchSize - 1, $users.list.Count - 1)
+        $currentBatchSize = $endIndex - $startIndex + 1
         
-        if ($matchingPermission) {
-            # Add site to user's sites collection - simpler structure with just the essentials
-            $user.sites[$site.id] = @{
-                siteId = $site.id
-                siteName = $site.displayName
-                driveId = $site.DriveId
-            }
-            
-            Write-Verbose "  Added site: $($site.displayName) to user $($user.displayName)'s access list"
-        } else {
-            Write-Verbose "  User $($user.displayName) does not have access to site: $($site.displayName)"
-        }
-    }
-    
-    # Show summary of sites for this user
-    $siteCount = $user.sites.Count
-    if ($siteCount -gt 0) {
-        $user.hasAccess = $true
-        Write-Verbose "User $($user.displayName) has access to $siteCount sites"
-        $totalaccessCount++
-    } else {
-        $user.hasAccess = $false
-        Write-Warning "User $($user.displayName) does not have access to any of the selected sites"
-    }
-}
-
-if ($totalaccessCount -eq 0) {
-    Write-Error "No users have access to any of the selected sites. Exiting..."
-    pause
-    exit
-}
-
-# Get DriveList with proper structure for the folders form
-$driveList = @()
-foreach ($site in $sites.list) {
-    if ($site.DriveId) {
-        $driveList += [PSCustomObject]@{
-            id = $site.DriveId
-            name = "Documents"
-            siteDisplayName = $site.DisplayName
-            siteId = $site.id
-            webUrl = $site.WebUrl
-            domainId = $site.domainId
-            webId = $site.webId
-            domainSiteId = $site.siteId
-        }
-    }
-}
-
-Write-Host "Getting folders for selected drives..."
-Write-Host "Please select the folders you want to work with..."
-try {
-    # Show the folder selection form
-    $selectedFolders = Show-FolderSelectionForm -DriveList $driveList -AccessToken $accessToken -Verbose:$SetVerbose
-    if ($LASTEXITCODE -ne 0) {
-        Write-Error "Error: Unable to get folders from Graph API."
-        pause
-        exit 1
-    }
-} catch {
-    Write-Error "Error: $($_.Exception.Message)"
-    pause
-    exit 1
-}
-
-# Display selected folders
-if (-not $selectedFolders -or $selectedFolders.Count -eq 0) {
-    Write-Error "No folders selected. Exiting..."
-    pause
-    exit
-}
-
-# Print selected folders
-Write-Host "Selected Folders:" -ForegroundColor Cyan
-$foldersTable = $selectedFolders | Format-Table -Property FolderName,SiteDisplayName -AutoSize | Out-String
-Write-Host $foldersTable
-
-Write-Host "Processing selected folders..."
-
-foreach ($folder in $selectedFolders) {
-    try {
-        Write-Verbose "Folder WebUrl: $($folder.webUrl)"
-        Write-Verbose "SharePointId: $($folder.siteId)"
-
-        # Get Documents list ID
-        $documentsList = Send-GraphRequest -Method GET -Uri "$(([uri]::new("$graphEndpoint/sites/$($folder.siteId)/lists?filter=displayName eq 'Documents'")).AbsoluteUri)" -AccessToken "$accessToken" -Verbose:$SetVerbose
-        if ($LASTEXITCODE -ne 0) {
-            Write-Error "Error: Unable to get Documents list from Graph API."
-            Write-Verbose "Error details: $documentsList"
-            Pause
-            exit 1
-        }
-        $documentsListObj = $documentsList | ConvertFrom-Json
-        $documentsListId = $documentsListObj.value | Where-Object {$_.name -eq "Shared Documents"} | Select-Object -ExpandProperty id
-
-        # Get eTag and webUrl from Shared Documents list
-        $documentsListItems = Send-GraphRequest -Method GET -Uri "$graphEndpoint/sites/$($folder.siteId)/lists/$documentsListId/items?select=eTag,webUrl" -AccessToken "$accessToken" -Verbose:$SetVerbose
-        if ($LASTEXITCODE -ne 0) {
-            Write-Error "Error: Unable to get Documents list items from Graph API."
-            Write-Verbose "Error details: $documentsListItems"
-            Pause
-            exit 1
-        }
-        $documentsListItemsObj = $documentsListItems | ConvertFrom-Json
+        $userlists["batch_$i"] = @()
         
-        # Get the eTag for the folder, if empty, use root folder
-        $rawETag = $documentsListItemsObj.value | Where-Object {$_.webUrl -eq $folder.webUrl} | Select-Object -ExpandProperty eTag
-        
-        # Process the eTag to extract just the ID part (removing quotes and ",1" suffix)
-        if ($rawETag) {
-            if ($rawETag -match '"([^"]+),\d+"' -or $rawETag -match '"([^"]+)"') {
-                # Extract the GUID part from the eTag, removing quotes and suffix
-                $cleanETag = $Matches[1]
-                Write-Verbose "Extracted clean eTag: $cleanETag from raw eTag: $rawETag"
-            } else {
-                # Fallback if pattern doesn't match
-                $cleanETag = $rawETag -replace '"', '' -replace ',\d+$', ''
-                Write-Verbose "Cleaned eTag using replace: $cleanETag from raw eTag: $rawETag"
-            }
-        } else {
-            $cleanETag = "root"
-            Write-Verbose "No eTag found, using: $cleanETag"
+        for ($j = $startIndex; $j -le $endIndex; $j++) {
+            # Extract ONLY the Mail property from each user
+            $email = $users.list[$j].Mail
+            $userlists["batch_$i"] += $email
+            $allEmails += $email
         }
         
-        Write-Verbose "Documents list ID: $documentsListId"
-        Write-Verbose "Documents list raw eTag: $rawETag"
-        Write-Verbose "Documents list clean eTag: $cleanETag"
-
-        # Add the eTag to the folder object
-        $folder | Add-Member -NotePropertyName "eTag" -NotePropertyValue $cleanETag -Force
-        $folder | Add-Member -NotePropertyName "eTagList" -NotePropertyValue $folder.webId -Force
-        $folder.eTag = $cleanETag
-        $folder.eTagList = $documentsListId
-    } catch {
-        Write-Error "Error: $($_.Exception.Message)"
-        Write-Verbose "Failed to get eTag for folder: $($folder.FolderName)"
-        Pause
-        exit 1
-    }
-}
-
-Write-Host "You can now edit the folder names for shortcut creation."
-
-try {
-    # Show the folder name edit form
-    $editedFolders = Show-FolderNameEditForm -SelectedFolders $selectedFolders -Verbose:$SetVerbose
-    if ($LASTEXITCODE -ne 0) {
-        Write-Error "Error: Unable to show folder name edit form."
-        pause
-        exit 1
-    }
-} catch {
-    Write-Error "Error: $($_.Exception.Message)"
-    pause
-    exit 1
-}
-
-# Check if user canceled the edit form
-if (-not $editedFolders -or $editedFolders.Count -eq 0) {
-    Write-Error "Folder editing was canceled. Exiting..."
-    pause
-    exit
-}
-
-Write-Host "Associating folders with users..."
-
-# Associate selected folders with users
-foreach ($user in $users.list) {
-    if (-not $user.hasAccess) {
-        Write-Warning "User $($user.displayName) does not have access to any sites. Skipping folder association."
-        continue
-    } else {
-        $user | Add-Member -NotePropertyName "folders" -NotePropertyValue @() -Force
-
-        # Print user information
-        $userInfo = $user.sites | Select-Object siteName | Format-Table -AutoSize | Out-String
-        Write-Verbose "User: $($user.DisplayName) - Sites:`n$userInfo"
-        
-        # For each site the user has access to
-        foreach ($siteId in $user.sites.Keys) {
-            # Get the driveId for this site from the user's sites collection
-            $siteDriveId = $user.sites[$siteId].driveId
-
-            Write-Verbose "Processing site: $($user.sites[$siteId].siteName)"
-            Write-Verbose "Site DriveId: $siteDriveId"
-            
-            # Find matching folders for this site's drive ID
-            $matchedFolders = @()
-            foreach ($folder in $editedFolders) {
-                $folderDriveId = $folder.DriveId.ToString().Trim()
-                $userSiteDriveId = $siteDriveId.ToString().Trim()
-                
-                Write-Verbose "Comparing folder '$($folder.FolderName)': '$folderDriveId' with site drive: '$userSiteDriveId'"
-                
-                # If the drive IDs match, add this folder to the matched set
-                if ($folderDriveId -ieq $userSiteDriveId) {
-                    Write-Verbose "MATCH FOUND - Adding folder: $($folder.FolderName)"
-                    $matchedFolders += $folder
-                }
-            }
-            
-            # Now add all matched folders to the user's folders collection
-            if ($matchedFolders.Count -gt 0) {
-                $user.folders += $matchedFolders
-                Write-Verbose "Added $($matchedFolders.Count) folders from site $($user.sites[$siteId].siteName) to user $($user.DisplayName)"
-                
-                foreach ($folder in $matchedFolders) {
-                    Write-Verbose "  - Added folder: $($folder.FolderName)"
-                }
-            } else {
-                Write-Verbose "No matching folders found for user $($user.DisplayName) in site $($user.sites[$siteId].siteName)"
-            }
-        }
-        
-        # Show summary for this user
-        Write-Verbose "Total folders for $($user.DisplayName): $(($user.folders | Measure-Object).Count)"
-
-        # Show all folders for each user
-        foreach ($folder in $user.folders) {
-            Write-Verbose "  - Folder: $($folder.FolderName) (DriveId: $($folder.DriveId), Path: $($folder.Path))"
-        }
-    }
-}
-
-Write-Host "Processing completed. Please review the selected folders and users."
-
-# Display the edited folders in a table format
-Write-Host "Edited Folders for Shortcut Creation:" -ForegroundColor Cyan
-foreach ($folder in $editedFolders) {
-    Write-Host ""
-    Write-Host "Foldername: $($folder.FolderName)" -ForegroundColor Green
-    Write-Host "Displayname: $($folder.DisplayName)" -ForegroundColor Green
-    Write-Host "Sharepoint-URL: $($folder.siteWebUrl)" -ForegroundColor Green
-    Write-Host ""
-}
-
-# Show count summary
-Write-Host "$($editedFolders.Count) folders will be used for shortcut creation" -ForegroundColor Green
-Write-Host ""
-
-# Show count and each folder name for each user
-foreach ($user in $users.list) {
-    Write-Host "User: $($user.DisplayName) ($($user.Mail))" -ForegroundColor Cyan
-    Write-Host "Total folders: $($user.folders.Count)" -ForegroundColor Green
-    Write-Host "Folders:" -ForegroundColor Cyan
-    
-    foreach ($folder in $user.folders) {
-        Write-Host "  - $($folder.DisplayName)" -ForegroundColor Green
+        Write-Verbose "Created batch_$i with $currentBatchSize emails"
     }
     
-    Write-Host ""
+    Write-Host "Created $batchCount email batch(es) for processing" -ForegroundColor Green
+    Write-Verbose "Total unique email addresses: $($allEmails.Count)"
+    Write-Verbose "First 5 email addresses: $($allEmails | Select-Object -First 5 -Unique)"
+} else {
+    Write-Host "No users selected, nothing to process" -ForegroundColor Yellow
 }
 
-Write-Host "Obtaining WebView2 cookies for Admin Center login..."
-
-# Grab Cookie from Admin Center Login
-try {
-    $acCookie = Invoke-Expression -Command "pwsh.exe -ExecutionPolicy Bypass -File `"$workpath\Get-WebView2Cookies.ps1`""
-    if ($LASTEXITCODE -ne 0) {
-        Write-Error "Error: Unable to get WebView2 cookies."
-        pause
-        exit 1
-    }
-    if (-not $acCookie) {
-        Write-Error "Error: No cookies found. Please ensure you are logged into the Admin Center."
-        pause
-        exit 1
-    }
-    if ($acCookie -like "*Error:*") {
-        Write-Error "Error: $acCookie"
-        pause
-        exit 1
-    }
-} catch {
-    Write-Error "Error: $($_.Exception.Message)"
-    pause
-    exit 1
-}
-
-Write-Verbose "WebView2 cookies obtained successfully."
-
-Write-Host "Processing OneDrive access for each user..."
-
-# Request Onedrive-Access for each user
-foreach ($user in $users.list) {
-    if (-not $user.hasAccess) {
-        Write-Warning "User $($user.displayName) does not have access to any sites. Skipping OneDrive access check and adding folders."
-        continue
-    } else {
-        Write-Verbose "Processing user: $($user.DisplayName) ($($user.Mail))"
+# Provision OneDrive personal sites for each batch of users
+if ($userlists.Count -gt 0) {
+    Write-Host "`nProvisioning OneDrive personal sites for all users..." -ForegroundColor Cyan
+    
+    $finalUserMailList = @()
+    $totalProcessed = 0
+    $batchProcessed = 0
+    
+    foreach ($batchKey in $userlists.Keys) {
+        $list = $userlists[$batchKey]
+        $batchSize = $list.Count
+        $totalProcessed += $batchSize
+        $batchProcessed++
         
-        $user | Add-Member -NotePropertyName "DriveAccess" -NotePropertyValue $null -Force
-
-        # Try to get permissions for each user's OneDrive
+        Write-Host "Processing batch $($batchKey): $batchSize users (batch $batchProcessed of $($userlists.Count))" -ForegroundColor Yellow
+        
         try {
-            $userDrive = Send-GraphRequest -Method GET -Uri "https://admin.microsoft.com/admin/api/users/accessodb?upn=$($user.Mail)" -Cookie "$acCookie" -Verbose:$SetVerbose
+            # Add emails to the final tracking list
+            $finalUserMailList += $list
+            
+            # Request OneDrive site provisioning with -NoWait parameter for efficiency
+            Request-SPOPersonalSite -UserEmails $list -NoWait
             if ($LASTEXITCODE -ne 0) {
-                Write-Error "Error: Unable to get OneDrive access for user $($user.DisplayName)."
-                Write-Verbose "Error details: $userDrive"
-                $user.DriveAccess = $false
-                continue
+                Write-Error "Error requesting OneDrive provisioning for batch $($batchKey)."
+                Pause
+                exit 1
             }
-
-            # Remove "" from the response
-            $userDrive = $userDrive -replace '"', ''
-
-            Write-Verbose "User's $($user.DisplayName) ($($user.Mail)) OneDrive access: $userDrive"
-
-            # Test access to the user's OneDrive
-            # Get OneDrive's drive ID
-            if ($null -eq $user.DriveAccess) {
-                $userDrive = Send-GraphRequest -Method GET -Uri "$(([uri]::new("$graphEndpoint/users/$($user.id)/drives?filter=name eq 'OneDrive'")).AbsoluteUri)" -AccessToken "$accessToken" -Verbose:$SetVerbose
-                if ($LASTEXITCODE -ne 0) {
-                    Write-Error "Error: Unable to get OneDrive for user $($user.DisplayName)."
-                    Write-Verbose "Error details: $userDrive"
-                    $user.DriveAccess = $false
-                    continue
-                } else {
-                    $userDriveObj = $userDrive | ConvertFrom-Json
-                    $userDriveId = $userDriveObj.value | Where-Object {$_.name -eq "OneDrive"} | Select-Object -ExpandProperty id
-                }
-            }
-            if (-not $userDriveId) {
-                Write-Warning "No 'OneDrive' found for user: $($user.displayName) ($($user.Mail))"
-                $user.DriveAccess = $false
-                continue
-            } else {
-                Write-Verbose "User $($user.DisplayName) ($($user.Mail)) has OneDrive with ID: $userDriveId"
-                $user | Add-Member -NotePropertyName "OneDriveId" -NotePropertyValue $userDriveId -Force
-                $user.OneDriveId = $userDriveId
-            }
-
-            if ($null -eq $user.DriveAccess) {
-                $userDriveRoot = Send-GraphRequest -Method GET -Uri "$graphEndpoint/drives/$($user.OneDriveId)/root" -AccessToken "$accessToken" -Verbose:$SetVerbose
-                if ($LASTEXITCODE -ne 0) {
-                    Write-Error "Error: Unable to get OneDrive root for user $($user.DisplayName)."
-                    Write-Verbose "Error details: $userDriveRoot"
-                    $user.DriveAccess = $false
-                    continue
-                } else {
-                    $userDriveRootObj = $userDriveRoot | ConvertFrom-Json
-                    Write-Verbose "User $($user.DisplayName) ($($user.Mail)) OneDrive root: $($userDriveRootObj.webUrl)"
-                    $user.DriveAccess = $true
-                }
-            }
-        } catch {
-            Write-Error "Error: $($_.Exception.Message)"
-            Write-Error "Failed to get OneDrive access for user $($user.DisplayName)."
-            continue
+            
+            Write-Host "Successfully requested OneDrive provisioning for batch $batchKey" -ForegroundColor Green
+            Write-Verbose "Emails in this batch: $($list -join ', ')"
         }
-
-        if ($user.DriveAccess) {
-            Write-Host "Attempt to get access to the user's OneDrive for user $($user.DisplayName) ($($user.Mail)) was successful." -ForegroundColor Green
-            if ($user.folders.Count -gt 0) {
-                Write-Host "Adding folders to user $($user.DisplayName)'s ($($user.Mail)) OneDrive..." -ForegroundColor Green
-                foreach ($folder in $user.folders) {
-                    Write-Host "  - Adding folder: $($folder.DisplayName) to OneDrive" -ForegroundColor Green
-                    
-                    # Create folder object using PowerShell hashtable instead of a raw JSON string
-                    $folderObject = @{
-                        name = $folder.FolderName
-                        remoteItem = @{
-                            sharepointIds = @{
-                                listId = $folder.eTagList
-                                listItemUniqueId = $folder.eTag
-                                siteId = $folder.DomainSiteId
-                                siteUrl = $folder.SiteWebUrl
-                                webId = $folder.WebId
-                            }
-                        }
-                        "@microsoft.graph.conflictBehavior" = "rename"
-                    }
-                    
-                    # Convert to JSON
-                    $POSTBody = $folderObject | ConvertTo-Json -Depth 10
-
-                    try {
-                        # Send the request to create the folder
-                        $response = Send-GraphRequest -Method POST -Uri "$graphEndpoint/drives/$($user.OneDriveId)/root/children" -AccessToken "$accessToken" -Body $POSTBody -Verbose:$SetVerbose
-                        if ($LASTEXITCODE -ne 0) {
-                            Write-Error "Error: Unable to create folder $($folder.FolderName) in OneDrive for user $($user.DisplayName)."
-                        }
-                        $responseObj = $response | ConvertFrom-Json
-                        
-                        # Check if the response contains an error object
-                        if ($responseObj.error) {
-                            # Check for specific error codes
-                            if ($responseObj.error.innerError.code -eq "shortcutAlreadyExists") {
-                                Write-Warning "Shortcut already exists: $($folder.FolderName) - Creation not possible - Skipping"
-                            }
-                            elseif ($responseObj.error.innerError.code -eq "nestedAscendantShortcutExists") {
-                                Write-Warning "A parent shortcut already exists that includes $($folder.FolderName) - Creation not possible - Skipping"
-                                Write-Warning "Manaully remove the parent shortcut to create this folder."
-                            }
-                            elseif ($responseObj.error.innerError.code -eq "nestedDescendantShortcutExists") {
-                                Write-Warning "A child shortcut already exists that includes $($folder.FolderName) - Creation not possible - Skipping"
-                                Write-Warning "Manaully remove the child shortcut to create this folder."
-                            }
-                            else {
-                                Write-Error "Error: $($responseObj.error.message)"
-                                Write-Error "Failed to create folder $($folder.FolderName) in OneDrive for user $($user.DisplayName)."
-                            }
-                        } else {
-                            # Create rename object using PowerShell hashtable
-                            $renameObject = @{
-                                name = $folder.DisplayName
-                            }
-                            
-                            # Convert to JSON
-                            $POSTBody = $renameObject | ConvertTo-Json
-
-                            # Send the request to rename the folder
-                            $response = Send-GraphRequest -Method PATCH -Uri "$graphEndpoint/drives/$($user.OneDriveId)/items/$($responseObj.id)" -AccessToken "$accessToken" -Body $POSTBody -Verbose:$SetVerbose
-                            if ($LASTEXITCODE -ne 0) {
-                                Write-Error "Error: Unable to rename folder $($folder.FolderName) in OneDrive for user $($user.DisplayName)."
-                            }
-                            $responseObj = $response | ConvertFrom-Json
-                            if ($responseObj.error) {
-                                if ($responseObj.error.code -eq "nameAlreadyExists") {
-                                    Write-Error "Folder name already exists: $($folder.DisplayName) - Renaming not possible"
-                                }
-                                else {
-                                    Write-Error "Error: $($responseObj.error.message)"
-                                    Write-Error "Failed to rename folder $($folder.FolderName) in OneDrive for user $($user.DisplayName)."
-                                }
-                            }
-                        }
-                    } catch {
-                        Write-Error "Error: $($_.Exception.Message)"
-                        Write-Error "Failed to create folder $($folder.FolderName) in OneDrive for user $($user.DisplayName)."
-                        continue
-                    }
-                }
-            } else {
-                Write-Host "No folders found for user $($user.DisplayName) ($($user.Mail)) in OneDrive." -ForegroundColor Yellow
-            }
-        } else {
-            Write-Warning "Skipping User $($user.DisplayName) ($($user.Mail)) - Either no Onedrive access or no OneDrive found." -ForegroundColor Red
+        catch {
+            Write-Error "Error requesting OneDrive provisioning for batch $($batchKey): $($_.Exception.Message)"
+            Pause
+            exit 1
         }
     }
+    
+    Write-Host "`nOneDrive provisioning summary:" -ForegroundColor Cyan
+    Write-Host "- Total users processed: $totalProcessed" -ForegroundColor White
+    Write-Host "- Total batches processed: $batchProcessed" -ForegroundColor White
+    Write-Host "- Users will receive their OneDrive sites asynchronously" -ForegroundColor White
+    
+    Write-Verbose "OneDrive provisioning requested for the following emails: $($finalUserMailList -join ', ')"
+    Write-Host "`nNote: This might take some time to complete. Please check the Admin Center for status updates."  -ForegroundColor Yellow
+}
+else {
+    Write-Host "`nNo user batches available for OneDrive provisioning." -ForegroundColor Yellow
 }
 
 # Display request statistics in a more appropriate way
