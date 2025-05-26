@@ -1,51 +1,49 @@
 <#
     .SYNOPSIS
-    This Script is able to handle adding Shortcuts to private Tennant OneDrive profiles redirected to the Sharepoint Online files. It supports multiple Users and multiple Sharepoint Sites with multiple Sharepoint folders.
-    It handles OAuth2 authentication with Microsoft Graph API and checks if PowerShell 7 is installed. If not, it installs PowerShell 7.
-    It also handles OAuth2 authentication with the Microsoft Admin Center to get access to the individual private OneDrive profiles.
+    This script adds shortcuts to private OneDrive profiles in your tenant, redirecting them to SharePoint Online folders. It supports multiple users, multiple SharePoint sites, and multiple SharePoint folders.
+    The script handles OAuth2 authentication with the Microsoft Graph API and checks if PowerShell 7 is installed, installing it if necessary.
+    It also manages OAuth2 authentication with the Microsoft Admin Center to access individual private OneDrive profiles.
 
     .DESCRIPTION
-    This script checks if PowerShell 7 is installed, and if not, it installs it.
-    It also handles OAuth2 authentication with Microsoft Graph API.
-    It checks if WebView2 is installed, and if not, it installs it.
-    It handles OAuth2 authentication with the Microsoft Admin Center to get access to the individual private OneDrive profiles.
-    It uses the Microsoft Graph API to get all users in the tenant and allows the user to select which users to work with.
-    It allows the user to select which Sharepoint sites to work with.
-    It allows the user to select which Sharepoint folders to work with.
-    It generates shortcuts for the selected users, sites, and folders.
-
+    This script checks for the presence of PowerShell 7 and installs it if missing.
+    It manages OAuth2 authentication with the Microsoft Graph API.
+    The script checks for the WebView2 runtime and installs it if required.
+    It authenticates with the Microsoft Admin Center to access private OneDrive profiles.
+    Using the Microsoft Graph API, it retrieves all users in the tenant and allows you to select which users to process.
+    It allows you to select which SharePoint sites and folders to work with.
+    The script then generates shortcuts for the selected users, sites, and folders.
 
     .PARAMETER tenantId
-    Enter your Microsoft Tenant ID.
+    Your Microsoft Tenant ID.
     This is the ID of your Entra Directory (Azure Active Directory) tenant.
-    Docs:
-    Find your tennant ID: https://learn.microsoft.com/entra/fundamentals/how-to-find-tenant
+    Documentation:
+    How to find your tenant ID: https://learn.microsoft.com/entra/fundamentals/how-to-find-tenant
 
     .PARAMETER clientId
-    Enter your Microsoft Client ID.
+    Your Microsoft Client ID.
     This is the ID of your registered application in Azure AD.
-    Docs:
-    Get the Client ID of your registered application: https://learn.microsoft.com/azure/healthcare-apis/register-application#application-id-client-id
+    Documentation:
+    How to get the Client ID of your registered application: https://learn.microsoft.com/azure/healthcare-apis/register-application#application-id-client-id
 
     .EXAMPLE
     .\Sharepoint-Shortcut-Generator.ps1 -tenantId 'your-tenant-id' -clientId 'your-client-id' -Verbose
 
     .NOTES
-    Required Scope-Permissions: files.readwrite.all, user.read.all, allsites.fullcontrol, allsites.manage, myfiles.read, myfiles.write and user.readwrite.all
-    You can find these permissions in Microsoft Graph and Sharepoint API.
-    files.readwrite.all and user.read.all are Microsoft Graph permissions.
-    allsites.fullcontrol, allsites.manage, myfiles.read, myfiles.write and user.readwrite.all are Sharepoint API permissions.
-    All Scope-Permissions require Admin Consent for the Tenant.
-    It will not work without Admin Consent and if any of the permissions are missing.
+    Required permissions (scopes): files.readwrite.all, user.read.all, allsites.fullcontrol, allsites.manage, myfiles.read, myfiles.write, and user.readwrite.all.
+    These permissions are found in the Microsoft Graph and SharePoint APIs.
+    - files.readwrite.all and user.read.all are Microsoft Graph permissions.
+    - allsites.fullcontrol, allsites.manage, myfiles.read, myfiles.write, and user.readwrite.all are SharePoint API permissions.
+    All scope permissions require admin consent for the tenant.
+    The script will not work without admin consent or if any required permissions are missing.
     WebView2 is required for the OAuth2 authentication process.
     The redirect URI must be set to "https://login.microsoftonline.com/common/oauth2/nativeclient" in the Entra (Azure) AD application registration.
 
-    Docs:
+    Documentation:
     Register an application in Azure AD: https://learn.microsoft.com/entra/identity-platform/quickstart-register-app
-    Add a Redirect URI to an application: https://learn.microsoft.com/entra/identity-platform/how-to-add-redirect-uri
+    Add a redirect URI to an application: https://learn.microsoft.com/entra/identity-platform/how-to-add-redirect-uri
     Configure permissions for an application: https://learn.microsoft.com/entra/identity-platform/quickstart-configure-app-access-web-apis
-    Find your tennant ID: https://learn.microsoft.com/entra/fundamentals/how-to-find-tenant
-#> 
+    How to find your tenant ID: https://learn.microsoft.com/entra/fundamentals/how-to-find-tenant
+#>
 
 [CmdletBinding(SupportsShouldProcess=$true)]
 Param(
